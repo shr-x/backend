@@ -7,6 +7,8 @@ import { Product, ProductSchema } from '../schemas/product.schema';
 import { Customer, CustomerSchema } from '../schemas/customer.schema';
 import { Order, OrderSchema } from '../schemas/order.schema';
 import { CartService } from '../cart/cart.service';
+import { PaymentService } from '../payment/payment.service';
+import { AiService } from '../ai/ai.service';
 
 @Module({
   imports: [
@@ -18,7 +20,7 @@ import { CartService } from '../cart/cart.service';
     ]),
   ],
   controllers: [WhatsappController],
-  providers: [WhatsappService, CartService],
-  exports: [WhatsappService],
+  providers: [WhatsappService, CartService, PaymentService, AiService],
+  exports: [WhatsappService, AiService],
 })
 export class WhatsappModule {}

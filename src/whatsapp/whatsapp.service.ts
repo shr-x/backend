@@ -105,7 +105,19 @@ export class WhatsappService {
     const storeNumber = value?.metadata?.display_phone_number;
     const store = await this.storeModel.findOne({ whatsappNumber: storeNumber });
 
-    if (!store) return;
+    if (!store) {
+      this.logger.warn(`Store not found for number: ${storeNumber}`);
+      return;
+    }
+
+    // Check if store is open
+    if (!this.isStoreOpen(store)) {
+      await this.sendWhatsAppMessage(from, {
+        type: 'text',
+        text: { body: `Sorry, ${store.name} is currently closed. Our operating hours are ${store.operatingHours.open} to ${store.operatingHours.close}. Please visit us again during these hours! 🕒` }
+      });
+      return;
+    }
 
     // Logic for different message types
     if (message.type === 'text') {
@@ -355,5 +367,22 @@ export class WhatsappService {
       });
 
       await this.cartService.clearCart(to, storeId);
+    }
+
+    private isStoreOpen(store: StoreDocument): boolean {
+      if (!store.operatingHours) return true;
+      
+      const now = new Date();
+      const [openHour, openMin] = store.operatingHours.open.split(':').map(Number);
+      const [closeHour, closeMin] = store.operatingHours.close.split(':').map(Number);
+      
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+      
+      const currentTime = currentHour * 60 + currentMin;
+      const openTime = openHour * 60 + openMin;
+      const closeTime = closeHour * 60 + closeMin;
+      
+      return currentTime >= openTime && currentTime <= closeTime;
     }
   }

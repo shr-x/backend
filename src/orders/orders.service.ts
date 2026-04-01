@@ -16,11 +16,11 @@ export class OrdersService {
     return this.orderModel.find({ storeId }).populate('customerId').sort({ createdAt: -1 }).exec();
   }
 
-  async findOne(id: string): Promise<Order> {
+  async findOne(id: string): Promise<Order | null> {
     return this.orderModel.findById(id).populate('customerId').exec();
   }
 
-  async update(id: string, updateOrderDto: UpdateOrderDto): Promise<Order> {
+  async update(id: string, updateOrderDto: UpdateOrderDto): Promise<Order | null> {
     const updatedOrder = await this.orderModel.findByIdAndUpdate(id, updateOrderDto, { new: true }).populate('customerId').exec();
     
     if (updatedOrder) {

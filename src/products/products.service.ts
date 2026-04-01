@@ -18,11 +18,11 @@ export class ProductsService {
     return this.productModel.find({ storeId }).exec();
   }
 
-  async findOne(id: string): Promise<Product> {
+  async findOne(id: string): Promise<Product | null> {
     return this.productModel.findById(id).exec();
   }
 
-  async update(id: string, updateProductDto: UpdateProductDto): Promise<Product> {
+  async update(id: string, updateProductDto: UpdateProductDto): Promise<Product | null> {
     return this.productModel.findByIdAndUpdate(id, updateProductDto, { new: true }).exec();
   }
 

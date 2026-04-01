@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import axios from 'axios';
 import { Store, StoreDocument } from '../schemas/store.schema';
 import { Product, ProductDocument } from '../schemas/product.schema';
@@ -67,7 +67,7 @@ export class WhatsappService {
     });
   }
 
-  async sendMenu(to: string, storeId: string) {
+  async sendMenu(to: string, storeId: Types.ObjectId) {
     const products = await this.productModel.find({ storeId, isAvailable: true });
     const categories = [...new Set(products.map(p => p.category))];
 
@@ -147,15 +147,15 @@ export class WhatsappService {
       if (interactive.type === 'button_reply') {
         const buttonId = interactive.button_reply.id;
         if (buttonId === 'view_menu') {
-          await this.sendMenu(from, store._id.toString());
+          await this.sendMenu(from, store._id as any);
         } else if (buttonId === 'view_cart') {
-          await this.sendCartSummary(from, store._id.toString());
+          await this.sendCartSummary(from, store._id as any);
         } else if (buttonId === 'checkout') {
-          await this.startCheckout(from, store._id.toString());
+          await this.startCheckout(from, store._id as any);
         } else if (buttonId === 'todays_offers') {
-          await this.sendMenu(from, store._id.toString());
+          await this.sendMenu(from, store._id as any);
         } else if (buttonId === 'order_now') {
-          await this.sendMenu(from, store._id.toString());
+          await this.sendMenu(from, store._id as any);
         } else {
           this.logger.warn(`Unknown button ID: ${buttonId}`);
         }
@@ -163,19 +163,19 @@ export class WhatsappService {
         const listId = interactive.list_reply.id;
         if (listId.startsWith('cat_')) {
           const category = listId.replace('cat_', '');
-          await this.sendCategoryProducts(from, store._id.toString(), category);
+          await this.sendCategoryProducts(from, store._id as any, category);
         } else if (listId.startsWith('prod_')) {
           const productId = listId.replace('prod_', '');
           await this.sendProductVariants(from, productId);
         } else if (listId.startsWith('var_')) {
           const [productId, variantIndex] = listId.replace('var_', '').split(':');
-          await this.addToCart(from, store._id.toString(), productId, parseInt(variantIndex));
+          await this.addToCart(from, store._id as any, productId, parseInt(variantIndex));
         }
       }
     }
   }
 
-  async sendCategoryProducts(to: string, storeId: string, category: string) {
+  async sendCategoryProducts(to: string, storeId: Types.ObjectId, category: string) {
     const products = await this.productModel.find({ storeId, category, isAvailable: true });
 
     await this.sendWhatsAppMessage(to, {
@@ -228,12 +228,12 @@ export class WhatsappService {
     });
   }
 
-  async addToCart(to: string, storeId: string, productId: string, variantIndex: number) {
+  async addToCart(to: string, storeId: Types.ObjectId, productId: string, variantIndex: number) {
     const product = await this.productModel.findById(productId);
     if (!product || !product.variants[variantIndex]) return;
 
     const variant = product.variants[variantIndex];
-    await this.cartService.addItem(to, storeId, {
+    await this.cartService.addItem(to, storeId.toString(), {
       productId,
       name: product.name,
       variantName: variant.name,
@@ -257,8 +257,8 @@ export class WhatsappService {
      });
    }
 
-   async sendCartSummary(to: string, storeId: string) {
-     const cart = await this.cartService.getCart(to, storeId);
+   async sendCartSummary(to: string, storeId: Types.ObjectId) {
+     const cart = await this.cartService.getCart(to, storeId.toString());
      if (cart.length === 0) {
        await this.sendWhatsAppMessage(to, {
          type: 'text',
@@ -290,8 +290,8 @@ export class WhatsappService {
      });
    }
 
-   async startCheckout(to: string, storeId: string) {
-     const cart = await this.cartService.getCart(to, storeId);
+   async startCheckout(to: string, storeId: Types.ObjectId) {
+     const cart = await this.cartService.getCart(to, storeId.toString());
      if (cart.length === 0) return;
 
      let total = 0;

@@ -68,14 +68,27 @@ export class WhatsappService {
   }
 
   async sendMenu(to: string, storeId: Types.ObjectId) {
-    this.logger.log(`Sending menu for store: ${storeId}`);
-    const products = await this.productModel.find({ storeId, isAvailable: true });
-    this.logger.log(`Found ${products.length} products for menu`);
+    this.logger.log(`Searching products for storeId: ${storeId} (type: ${typeof storeId})`);
+    
+    // Convert storeId to string just in case the manual insert used strings
+    const products = await this.productModel.find({ 
+      $or: [
+        { storeId: storeId },
+        { storeId: storeId.toString() }
+      ],
+      isAvailable: true 
+    }).exec();
+
+    this.logger.log(`Found ${products.length} products`);
 
     if (products.length === 0) {
+      // Fallback: search by ANY storeId if this is a test/demo to see if data exists
+      const anyProduct = await this.productModel.findOne().exec();
+      this.logger.log(`Sample product from DB: ${JSON.stringify(anyProduct)}`);
+      
       await this.sendWhatsAppMessage(to, {
         type: 'text',
-        text: { body: 'Sorry, we don\'t have any products available right now. Please check back later!' },
+        text: { body: `Sorry, we couldn't find any products for this store (ID: ${storeId}). Please ensure products are linked to the correct Store ID.` },
       });
       return;
     }
@@ -204,7 +217,11 @@ export class WhatsappService {
   }
 
   async sendCategoryProducts(to: string, storeId: Types.ObjectId, category: string) {
-    const products = await this.productModel.find({ storeId, category, isAvailable: true });
+    const products = await this.productModel.find({ 
+      $or: [{ storeId }, { storeId: storeId.toString() }],
+      category, 
+      isAvailable: true 
+    });
 
     await this.sendWhatsAppMessage(to, {
       type: 'interactive',
@@ -310,7 +327,7 @@ export class WhatsappService {
          body: { text: summary },
          action: {
            buttons: [
-             { type: 'reply', reply: { id: 'view_menu', title: 'Add More' } },
+             { type: 'reply', reply: { id: 'view_menu_again', title: 'Add More' } },
              { type: 'reply', reply: { id: 'checkout', title: 'Checkout' } },
            ],
          },

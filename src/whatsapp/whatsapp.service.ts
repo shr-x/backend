@@ -102,11 +102,14 @@ export class WhatsappService {
     if (!message) return;
 
     const from = message.from;
-    const storeNumber = value?.metadata?.display_phone_number;
-    const store = await this.storeModel.findOne({ whatsappNumber: storeNumber });
+    const rawStoreNumber = value?.metadata?.display_phone_number;
+    const normalizedStoreNumber = rawStoreNumber?.replace(/\D/g, '');
+    const store = await this.storeModel.findOne({ 
+      whatsappNumber: { $in: [normalizedStoreNumber, rawStoreNumber] } 
+    });
 
     if (!store) {
-      this.logger.warn(`Store not found for number: ${storeNumber}`);
+      this.logger.warn(`Store not found for number: ${rawStoreNumber} (normalized: ${normalizedStoreNumber})`);
       return;
     }
 
@@ -149,6 +152,12 @@ export class WhatsappService {
           await this.sendCartSummary(from, store._id.toString());
         } else if (buttonId === 'checkout') {
           await this.startCheckout(from, store._id.toString());
+        } else if (buttonId === 'todays_offers') {
+          await this.sendMenu(from, store._id.toString());
+        } else if (buttonId === 'order_now') {
+          await this.sendMenu(from, store._id.toString());
+        } else {
+          this.logger.warn(`Unknown button ID: ${buttonId}`);
         }
       } else if (interactive.type === 'list_reply') {
         const listId = interactive.list_reply.id;

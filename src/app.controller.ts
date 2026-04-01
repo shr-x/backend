@@ -27,9 +27,9 @@ export class AppController {
   }
 
   @Get('api/dashboard-stats')
-  async getDashboardStats(@Query('storeId') storeId: string) {
-    const orders = await this.orderModel.find({ storeId }).exec();
-    const customers = await this.customerModel.countDocuments({ storeId }).exec();
+  async getDashboardStats() {
+    const orders = await this.orderModel.find().exec();
+    const customers = await this.customerModel.countDocuments().exec();
     
     const totalRevenue = orders
       .filter(o => o.status === 'delivered' || o.status === 'paid')
@@ -41,7 +41,7 @@ export class AppController {
       totalRevenue,
       activeOrders,
       totalCustomers: customers,
-      avgFulfillment: '45 mins', // Placeholder for now
+      avgFulfillment: '45 mins',
     };
   }
 }

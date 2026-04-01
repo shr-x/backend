@@ -17,8 +17,8 @@ class ProductVariant {
 
 @Schema({ timestamps: true })
 export class Product {
-  @Prop({ type: Types.ObjectId, ref: 'Store', required: true })
-  storeId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Store', required: false })
+  storeId?: Types.ObjectId;
 
   @Prop({ required: true })
   name: string;

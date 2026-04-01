@@ -14,8 +14,11 @@ export class ProductsService {
     return createdProduct.save();
   }
 
-  async findAll(storeId: string): Promise<Product[]> {
-    return this.productModel.find({ storeId }).exec();
+  async findAll(storeId?: string): Promise<Product[]> {
+    if (storeId) {
+      return this.productModel.find({ storeId }).exec();
+    }
+    return this.productModel.find().exec();
   }
 
   async findOne(id: string): Promise<Product | null> {

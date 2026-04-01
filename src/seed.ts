@@ -75,10 +75,9 @@ async function seed() {
     ];
 
     await productModel.findOneAndUpdate(
-      { storeId: store._id, name: p.name },
+      { name: p.name },
       {
         ...p,
-        storeId: store._id,
         slug: generateSlug(p.name),
         variants,
         inStock: true,

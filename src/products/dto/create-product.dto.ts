@@ -14,7 +14,8 @@ class VariantDto {
 
 export class CreateProductDto {
   @IsString()
-  storeId: string;
+  @IsOptional()
+  storeId?: string;
 
   @IsString()
   name: string;

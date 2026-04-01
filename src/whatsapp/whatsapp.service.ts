@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import axios from 'axios';
 import { Store, StoreDocument } from '../schemas/store.schema';
 import { Product, ProductDocument } from '../schemas/product.schema';
@@ -67,28 +67,19 @@ export class WhatsappService {
     });
   }
 
-  async sendMenu(to: string, storeId: Types.ObjectId) {
-    this.logger.log(`Searching products for storeId: ${storeId} (type: ${typeof storeId})`);
+  async sendMenu(to: string) {
+    this.logger.log(`Searching all available products for menu`);
     
-    // Convert storeId to string just in case the manual insert used strings
     const products = await this.productModel.find({ 
-      $or: [
-        { storeId: storeId },
-        { storeId: storeId.toString() }
-      ],
       isAvailable: true 
     }).exec();
 
     this.logger.log(`Found ${products.length} products`);
 
     if (products.length === 0) {
-      // Fallback: search by ANY storeId if this is a test/demo to see if data exists
-      const anyProduct = await this.productModel.findOne().exec();
-      this.logger.log(`Sample product from DB: ${JSON.stringify(anyProduct)}`);
-      
       await this.sendWhatsAppMessage(to, {
         type: 'text',
-        text: { body: `Sorry, we couldn't find any products for this store (ID: ${storeId}). Please ensure products are linked to the correct Store ID.` },
+        text: { body: `Sorry, we couldn't find any products in our catalog right now. Please check back later!` },
       });
       return;
     }
@@ -175,12 +166,12 @@ export class WhatsappService {
         await this.sendWhatsAppMessage(from, { type: 'text', text: { body: aiResponse } });
       } else {
         // Assume this is an address for checkout
-        await this.processCheckoutWithAddress(from, store._id.toString(), text);
+        await this.processCheckoutWithAddress(from, text);
       }
     } else if (message.type === 'location') {
       this.logger.log('Received location message');
       const location = message.location;
-      await this.processCheckoutWithLocation(from, store._id.toString(), location);
+      await this.processCheckoutWithLocation(from, location);
     } else if (message.type === 'interactive') {
       const interactive = message.interactive;
       this.logger.log(`Received interactive message: ${interactive.type}`);
@@ -190,11 +181,11 @@ export class WhatsappService {
         this.logger.log(`Button ID: ${buttonId}`);
         
         if (buttonId === 'view_menu' || buttonId === 'todays_offers' || buttonId === 'order_now' || buttonId === 'view_menu_again') {
-          await this.sendMenu(from, store._id as any);
+          await this.sendMenu(from);
         } else if (buttonId === 'view_cart') {
-          await this.sendCartSummary(from, store._id as any);
+          await this.sendCartSummary(from);
         } else if (buttonId === 'checkout') {
-          await this.startCheckout(from, store._id as any);
+          await this.startCheckout(from);
         } else {
           this.logger.warn(`Unhandled button ID: ${buttonId}`);
         }
@@ -204,21 +195,20 @@ export class WhatsappService {
         
         if (listId.startsWith('cat_')) {
           const category = listId.replace('cat_', '');
-          await this.sendCategoryProducts(from, store._id as any, category);
+          await this.sendCategoryProducts(from, category);
         } else if (listId.startsWith('prod_')) {
           const productId = listId.replace('prod_', '');
           await this.sendProductVariants(from, productId);
         } else if (listId.startsWith('var_')) {
           const [productId, variantIndex] = listId.replace('var_', '').split(':');
-          await this.addToCart(from, store._id as any, productId, parseInt(variantIndex));
+          await this.addToCart(from, productId, parseInt(variantIndex));
         }
       }
     }
   }
 
-  async sendCategoryProducts(to: string, storeId: Types.ObjectId, category: string) {
+  async sendCategoryProducts(to: string, category: string) {
     const products = await this.productModel.find({ 
-      $or: [{ storeId }, { storeId: storeId.toString() }],
       category, 
       isAvailable: true 
     });
@@ -273,12 +263,12 @@ export class WhatsappService {
     });
   }
 
-  async addToCart(to: string, storeId: Types.ObjectId, productId: string, variantIndex: number) {
+  async addToCart(to: string, productId: string, variantIndex: number) {
     const product = await this.productModel.findById(productId);
     if (!product || !product.variants[variantIndex]) return;
 
     const variant = product.variants[variantIndex];
-    await this.cartService.addItem(to, storeId.toString(), {
+    await this.cartService.addItem(to, {
       productId,
       name: product.name,
       variantName: variant.name,
@@ -302,8 +292,8 @@ export class WhatsappService {
      });
    }
 
-   async sendCartSummary(to: string, storeId: Types.ObjectId) {
-     const cart = await this.cartService.getCart(to, storeId.toString());
+   async sendCartSummary(to: string) {
+     const cart = await this.cartService.getCart(to);
      if (cart.length === 0) {
        await this.sendWhatsAppMessage(to, {
          type: 'text',
@@ -335,8 +325,8 @@ export class WhatsappService {
      });
    }
 
-   async startCheckout(to: string, storeId: Types.ObjectId) {
-     const cart = await this.cartService.getCart(to, storeId.toString());
+   async startCheckout(to: string) {
+     const cart = await this.cartService.getCart(to);
      if (cart.length === 0) return;
 
      let total = 0;
@@ -354,75 +344,69 @@ export class WhatsappService {
      // Note: We would usually store the state "AWAITING_ADDRESS" in Redis for this user.
     }
 
-    async processCheckoutWithAddress(to: string, storeId: string, address: string) {
-      const cart = await this.cartService.getCart(to, storeId);
+    async processCheckoutWithAddress(to: string, address: string) {
+      const cart = await this.cartService.getCart(to);
       if (cart.length === 0) return;
 
       const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-
-      // Create or update customer
-      let customer = await this.customerModel.findOne({ whatsappNumber: to, storeId });
-      if (!customer) {
-        customer = await this.customerModel.create({ whatsappNumber: to, storeId, address });
-      } else {
-        customer.address = address;
-        await customer.save();
-      }
+      const store = await this.storeModel.findOne(); // Just get the single store
+      
+      const customer = await this.customerModel.findOneAndUpdate(
+        { whatsappNumber: to },
+        { name: 'WhatsApp Customer', whatsappNumber: to, storeId: store?._id },
+        { upsert: true, new: true }
+      );
 
       const order = await this.orderModel.create({
-        storeId,
         customerId: customer._id,
+        storeId: store?._id,
         items: cart,
         totalAmount: total,
+        status: 'preparing',
         deliveryAddress: address,
-      });
+      } as any);
 
-      const razorpayOrder = await this.paymentService.createOrder(total, 'INR', order._id.toString());
-      const paymentLink = this.paymentService.getPaymentLink(razorpayOrder.id, total);
-
+      await this.cartService.clearCart(to);
+      
+      const orderId = (order as any)._id;
       await this.sendWhatsAppMessage(to, {
         type: 'text',
-        text: { body: `Great! Your order of ₹${total} is ready. Please complete the payment using this link: ${paymentLink}\n\nOrder ID: ${order._id}` },
+        text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been placed. We'll notify you when it's out for delivery!` },
       });
-
-      await this.cartService.clearCart(to, storeId);
     }
 
-    async processCheckoutWithLocation(to: string, storeId: string, location: any) {
-      const cart = await this.cartService.getCart(to, storeId);
+    async processCheckoutWithLocation(to: string, location: any) {
+      const cart = await this.cartService.getCart(to);
       if (cart.length === 0) return;
 
       const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+      const store = await this.storeModel.findOne();
 
-      let customer = await this.customerModel.findOne({ whatsappNumber: to, storeId });
-      if (!customer) {
-        customer = await this.customerModel.create({
-          whatsappNumber: to,
-          storeId,
-          location: { type: 'Point', coordinates: [location.longitude, location.latitude] },
-        });
-      } else {
-        customer.location = { type: 'Point', coordinates: [location.longitude, location.latitude] };
-        await customer.save();
-      }
+      const customer = await this.customerModel.findOneAndUpdate(
+        { whatsappNumber: to },
+        { name: 'WhatsApp Customer', whatsappNumber: to, storeId: store?._id },
+        { upsert: true, new: true }
+      );
 
       const order = await this.orderModel.create({
-        storeId,
         customerId: customer._id,
+        storeId: store?._id,
         items: cart,
         totalAmount: total,
-        deliveryLocation: { type: 'Point', coordinates: [location.longitude, location.latitude] },
-      });
+        status: 'preparing',
+        deliveryLocation: {
+          type: 'Point',
+          coordinates: [location.longitude, location.latitude],
+        },
+      } as any);
 
-      const razorpayOrder = await this.paymentService.createOrder(total, 'INR', order._id.toString());
-      const paymentLink = this.paymentService.getPaymentLink(razorpayOrder.id, total);
-
+      await this.cartService.clearCart(to);
+      
+      const orderId = (order as any)._id;
       await this.sendWhatsAppMessage(to, {
         type: 'text',
-        text: { body: `Location received! Your order of ₹${total} is ready. Please complete the payment: ${paymentLink}\n\nOrder ID: ${order._id}` },
+        text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been placed. We'll notify you when it's out for delivery!` },
       });
-
-      await this.cartService.clearCart(to, storeId);
     }
 
     private isStoreOpen(store: StoreDocument): boolean {

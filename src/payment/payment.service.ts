@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as Razorpay from 'razorpay';
+import Razorpay from 'razorpay';
 
 @Injectable()
 export class PaymentService {

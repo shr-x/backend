@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Query, Res, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { WhatsappService } from './whatsapp.service';
-import { Response } from 'express';
+import type { Response } from 'express';
 
 @Controller('whatsapp')
 export class WhatsappController {

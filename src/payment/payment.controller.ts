@@ -1,7 +1,7 @@
 import { Controller, Post, Body, HttpStatus, Res, Query } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 

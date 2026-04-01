@@ -20,6 +20,9 @@ export class CreateProductDto {
   name: string;
 
   @IsString()
+  slug: string;
+
+  @IsString()
   @IsOptional()
   description?: string;
 
@@ -31,7 +34,7 @@ export class CreateProductDto {
   unit?: string;
 
   @IsString()
-  category: string;
+  category: 'chicken' | 'fish' | 'seafood';
 
   @IsString()
   @IsOptional()
@@ -40,6 +43,14 @@ export class CreateProductDto {
   @IsBoolean()
   @IsOptional()
   isAvailable?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  inStock?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  tags?: string[];
 
   @IsArray()
   @ValidateNested({ each: true })

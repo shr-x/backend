@@ -45,7 +45,13 @@ export class WhatsappService {
       );
     } catch (error) {
       this.logger.error('Error sending WhatsApp message', error.response?.data || error.message);
+      this.logger.error('Failed Payload:', JSON.stringify(payload, null, 2));
     }
+  }
+
+  private truncate(str: string, length: number): string {
+    if (!str) return '';
+    return str.length > length ? str.substring(0, length - 3) + '...' : str;
   }
 
   async sendWelcomeMessage(to: string, store: StoreDocument) {
@@ -100,7 +106,7 @@ export class WhatsappService {
               title: 'Meat Categories',
               rows: categories.map(cat => ({
                 id: `cat_${cat}`,
-                title: cat,
+                title: this.truncate(cat, 24),
               })),
             },
           ],
@@ -217,17 +223,17 @@ export class WhatsappService {
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: `${category} Items` },
+        header: { type: 'text', text: this.truncate(`${category} Items`, 60) },
         body: { text: 'Choose an item to see options.' },
         action: {
           button: 'Select Item',
           sections: [
             {
-              title: category,
+              title: this.truncate(category, 24),
               rows: products.map(p => ({
                 id: `prod_${p._id}`,
-                title: p.name,
-                description: `From ₹${p.basePrice}`,
+                title: this.truncate(p.name, 24),
+                description: this.truncate(`From ₹${p.basePrice}`, 72),
               })),
             },
           ],
@@ -244,7 +250,7 @@ export class WhatsappService {
       type: 'interactive',
       interactive: {
         type: 'list',
-        header: { type: 'text', text: product.name },
+        header: { type: 'text', text: this.truncate(product.name, 60) },
         body: { text: 'Select a variant to add to cart.' },
         action: {
           button: 'Select Variant',
@@ -253,8 +259,8 @@ export class WhatsappService {
               title: 'Available Options',
               rows: product.variants.map((v, idx) => ({
                 id: `var_${productId}:${idx}`,
-                title: v.name,
-                description: `Price: ₹${v.price}`,
+                title: this.truncate(v.name, 24),
+                description: this.truncate(`Price: ₹${v.price}`, 72),
               })),
             },
           ],

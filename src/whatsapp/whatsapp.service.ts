@@ -68,8 +68,20 @@ export class WhatsappService {
   }
 
   async sendMenu(to: string, storeId: Types.ObjectId) {
+    this.logger.log(`Sending menu for store: ${storeId}`);
     const products = await this.productModel.find({ storeId, isAvailable: true });
+    this.logger.log(`Found ${products.length} products for menu`);
+
+    if (products.length === 0) {
+      await this.sendWhatsAppMessage(to, {
+        type: 'text',
+        text: { body: 'Sorry, we don\'t have any products available right now. Please check back later!' },
+      });
+      return;
+    }
+
     const categories = [...new Set(products.map(p => p.category))];
+    this.logger.log(`Categories: ${categories.join(', ')}`);
 
     await this.sendWhatsAppMessage(to, {
       type: 'interactive',
@@ -94,27 +106,38 @@ export class WhatsappService {
   }
 
   async handleWebhook(body: any) {
+    this.logger.log('Incoming Webhook Body:', JSON.stringify(body, null, 2));
+    
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const message = value?.messages?.[0];
 
-    if (!message) return;
+    if (!message) {
+      this.logger.log('No message found in webhook');
+      return;
+    }
 
     const from = message.from;
     const rawStoreNumber = value?.metadata?.display_phone_number;
     const normalizedStoreNumber = rawStoreNumber?.replace(/\D/g, '');
+    
+    this.logger.log(`Lookup store for number: ${rawStoreNumber} (normalized: ${normalizedStoreNumber})`);
+    
     const store = await this.storeModel.findOne({ 
       whatsappNumber: { $in: [normalizedStoreNumber, rawStoreNumber] } 
     });
 
     if (!store) {
-      this.logger.warn(`Store not found for number: ${rawStoreNumber} (normalized: ${normalizedStoreNumber})`);
+      this.logger.warn(`Store NOT found for number: ${rawStoreNumber}`);
       return;
     }
 
+    this.logger.log(`Found store: ${store.name} (${store._id})`);
+
     // Check if store is open
     if (!this.isStoreOpen(store)) {
+      this.logger.log(`Store ${store.name} is CLOSED`);
       await this.sendWhatsAppMessage(from, {
         type: 'text',
         text: { body: `Sorry, ${store.name} is currently closed. Our operating hours are ${store.operatingHours.open} to ${store.operatingHours.close}. Please visit us again during these hours! 🕒` }
@@ -125,6 +148,8 @@ export class WhatsappService {
     // Logic for different message types
     if (message.type === 'text') {
       const text = message.text.body.toLowerCase();
+      this.logger.log(`Received text message: ${text}`);
+      
       if (text === 'hi' || text === 'hello') {
         await this.sendWelcomeMessage(from, store);
       } else if (text.length > 5 && text.includes(' ')) {
@@ -140,27 +165,30 @@ export class WhatsappService {
         await this.processCheckoutWithAddress(from, store._id.toString(), text);
       }
     } else if (message.type === 'location') {
+      this.logger.log('Received location message');
       const location = message.location;
       await this.processCheckoutWithLocation(from, store._id.toString(), location);
     } else if (message.type === 'interactive') {
       const interactive = message.interactive;
+      this.logger.log(`Received interactive message: ${interactive.type}`);
+      
       if (interactive.type === 'button_reply') {
         const buttonId = interactive.button_reply.id;
-        if (buttonId === 'view_menu') {
+        this.logger.log(`Button ID: ${buttonId}`);
+        
+        if (buttonId === 'view_menu' || buttonId === 'todays_offers' || buttonId === 'order_now' || buttonId === 'view_menu_again') {
           await this.sendMenu(from, store._id as any);
         } else if (buttonId === 'view_cart') {
           await this.sendCartSummary(from, store._id as any);
         } else if (buttonId === 'checkout') {
           await this.startCheckout(from, store._id as any);
-        } else if (buttonId === 'todays_offers') {
-          await this.sendMenu(from, store._id as any);
-        } else if (buttonId === 'order_now') {
-          await this.sendMenu(from, store._id as any);
         } else {
-          this.logger.warn(`Unknown button ID: ${buttonId}`);
+          this.logger.warn(`Unhandled button ID: ${buttonId}`);
         }
       } else if (interactive.type === 'list_reply') {
         const listId = interactive.list_reply.id;
+        this.logger.log(`List ID: ${listId}`);
+        
         if (listId.startsWith('cat_')) {
           const category = listId.replace('cat_', '');
           await this.sendCategoryProducts(from, store._id as any, category);

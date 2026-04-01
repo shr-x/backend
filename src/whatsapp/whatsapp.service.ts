@@ -126,9 +126,11 @@ export class WhatsappService {
         await this.sendWelcomeMessage(from, store);
       } else if (text.length > 5 && text.includes(' ')) {
         // Use AI for general queries
+        const customer = await this.customerModel.findOne({ whatsappNumber: from, storeId: store._id });
+        const pastOrders = customer ? await this.orderModel.find({ customerId: customer._id }) : [];
         const products = await this.productModel.find({ storeId: store._id, isAvailable: true });
         const context = `Shop: ${store.name}. Available items: ${products.map(p => p.name).join(', ')}.`;
-        const aiResponse = await this.aiService.generateResponse(text, context);
+        const aiResponse = await this.aiService.generateResponse(text, context, pastOrders);
         await this.sendWhatsAppMessage(from, { type: 'text', text: { body: aiResponse } });
       } else {
         // Assume this is an address for checkout

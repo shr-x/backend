@@ -13,11 +13,20 @@ import { PaymentService } from './payment/payment.service';
 import { PaymentController } from './payment/payment.controller';
 import { AiService } from './ai/ai.service';
 import { MarketingService } from './marketing/marketing.service';
+import { ProductsModule } from './products/products.module';
+import { OrdersModule } from './orders/orders.module';
+import { UploadController } from './upload/upload.controller';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
@@ -33,8 +42,10 @@ import { MarketingService } from './marketing/marketing.service';
       { name: Order.name, schema: OrderSchema },
     ]),
     WhatsappModule,
+    ProductsModule,
+    OrdersModule,
   ],
-  controllers: [AppController, PaymentController],
+  controllers: [AppController, PaymentController, UploadController],
   providers: [AppService, CartService, PaymentService, AiService, MarketingService],
 })
 export class AppModule {}

@@ -13,8 +13,8 @@ export class AiService {
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
   }
 
-  async generateResponse(prompt: string, context: string): Promise<string> {
-    const fullPrompt = `
+  async generateResponse(prompt: string, context: string, pastOrders: any[]): Promise<string> {
+    let fullPrompt = `
       You are an AI assistant for a premium meat shop. 
       Context: ${context}
       User Question: ${prompt}
@@ -25,6 +25,12 @@ export class AiService {
       3. Keep responses concise and suitable for WhatsApp.
       4. If you don't know the answer, ask them to wait for a human representative.
     `;
+
+    if (pastOrders.length > 0) {
+      const favoriteItems = pastOrders.flatMap(o => o.items.map(i => i.name));
+      const uniqueFavoriteItems = [...new Set(favoriteItems)];
+      fullPrompt += `\n\nThis user has previously ordered: ${uniqueFavoriteItems.join(', ')}. You can use this to make personalized recommendations.`;
+    }
 
     try {
       const result = await this.model.generateContent(fullPrompt);

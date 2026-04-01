@@ -12,12 +12,12 @@ async function seed() {
   const productModel = app.get<Model<Product>>(getModelToken(Product.name));
 
   // 1. Create a Meat Shop Store
-  // IMPORTANT: Replace '919876543210' with your actual WhatsApp Business Number (without +)
+  // IMPORTANT: Replace '15551363886' with your actual WhatsApp Business Number (without +)
   const store = await storeModel.findOneAndUpdate(
-    { whatsappNumber: '919876543210' },
+    { whatsappNumber: '15551363886' },
     {
       name: 'The Fresh Meat Co.',
-      whatsappNumber: '919876543210', // Your WhatsApp Business Phone Number
+      whatsappNumber: '15551363886', // Your WhatsApp Business Phone Number
       address: '123 Butcher Lane, Meat Market',
       location: { type: 'Point', coordinates: [77.5946, 12.9716] }, // Bangalore
       deliveryRadius: 10,

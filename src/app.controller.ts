@@ -6,7 +6,7 @@ import { Store } from './schemas/store.schema';
 import { Order } from './schemas/order.schema';
 import { Customer } from './schemas/customer.schema';
 
-@Controller()
+@Controller('api')
 export class AppController {
   constructor(
     private readonly appService: AppService,
@@ -20,13 +20,18 @@ export class AppController {
     return this.appService.getHello();
   }
 
-  @Get('api/store-info')
+  @Get('health')
+  getHealth() {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  }
+
+  @Get('store-info')
   async getStoreInfo() {
     // Return the first store found in the DB
     return this.storeModel.findOne().exec();
   }
 
-  @Get('api/dashboard-stats')
+  @Get('dashboard-stats')
   async getDashboardStats() {
     const orders = await this.orderModel.find().exec();
     const customers = await this.customerModel.countDocuments().exec();

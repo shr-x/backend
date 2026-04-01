@@ -12,7 +12,7 @@ export class MarketingService {
   ) {}
 
   async broadcastOffer(storeId: string, message: string) {
-    const customers = await this.customerModel.find({ storeId });
+    const customers = await this.customerModel.find().exec();
     for (const customer of customers) {
       await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, {
         type: 'text',

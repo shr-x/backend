@@ -12,8 +12,11 @@ export class OrdersService {
     private readonly whatsappService: WhatsappService,
   ) {}
 
-  async findAll(storeId: string): Promise<Order[]> {
-    return this.orderModel.find({ storeId }).populate('customerId').sort({ createdAt: -1 }).exec();
+  async findAll(storeId?: string): Promise<Order[]> {
+    if (storeId) {
+      return this.orderModel.find({ storeId }).populate('customerId').sort({ createdAt: -1 }).exec();
+    }
+    return this.orderModel.find().populate('customerId').sort({ createdAt: -1 }).exec();
   }
 
   async findOne(id: string): Promise<Order | null> {

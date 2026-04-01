@@ -19,6 +19,8 @@ import { UploadController } from './upload/upload.controller';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
+import { MarketingController } from './marketing/marketing.controller';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -45,7 +47,7 @@ import { join } from 'path';
     ProductsModule,
     OrdersModule,
   ],
-  controllers: [AppController, PaymentController, UploadController],
+  controllers: [AppController, PaymentController, UploadController, MarketingController],
   providers: [AppService, CartService, PaymentService, AiService, MarketingService],
 })
 export class AppModule {}

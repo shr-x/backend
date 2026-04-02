@@ -419,11 +419,20 @@ export class WhatsappService {
       if (!store.operatingHours) return true;
       
       const now = new Date();
+      // Use Intl.DateTimeFormat to get IST components as the store is in India
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      });
+      
+      const parts = formatter.formatToParts(now);
+      const currentHour = parseInt(parts.find(p => p.type === 'hour').value, 10);
+      const currentMin = parseInt(parts.find(p => p.type === 'minute').value, 10);
+      
       const [openHour, openMin] = store.operatingHours.open.split(':').map(Number);
       const [closeHour, closeMin] = store.operatingHours.close.split(':').map(Number);
-      
-      const currentHour = now.getHours();
-      const currentMin = now.getMinutes();
       
       const currentTime = currentHour * 60 + currentMin;
       const openTime = openHour * 60 + openMin;

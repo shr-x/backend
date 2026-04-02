@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { getModelToken } from '@nestjs/mongoose';
 import { Store } from './schemas/store.schema';
 import { Product } from './schemas/product.schema';
+import { Customer } from './schemas/customer.schema';
 import { Model } from 'mongoose';
 
 const productsData = [
@@ -36,6 +37,13 @@ const productsData = [
   { name: 'Mussels', category: 'seafood', basePrice: 580, description: 'Fresh cleaned mussels, a seafood lover\'s delight.', tags: ['delicacy'] },
 ];
 
+const customersData = [
+  { name: 'John Doe', whatsappNumber: '919876543210' },
+  { name: 'Jane Smith', whatsappNumber: '919876543211' },
+  { name: 'Alice Johnson', whatsappNumber: '919876543212' },
+  { name: 'Bob Brown', whatsappNumber: '919876543213' },
+];
+
 function generateSlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
@@ -45,28 +53,26 @@ async function seed() {
   
   const storeModel = app.get<Model<Store>>(getModelToken(Store.name));
   const productModel = app.get<Model<Product>>(getModelToken(Product.name));
+  const customerModel = app.get<Model<Customer>>(getModelToken(Customer.name));
 
   // 1. Ensure a Store exists
   const store = await storeModel.findOneAndUpdate(
     { whatsappNumber: '15551363886' },
     {
-      name: 'The Fresh Meat Co.',
+      name: 'Chick Meat',
       whatsappNumber: '15551363886',
-      address: '123 Butcher Lane, Meat Market',
-      location: { type: 'Point', coordinates: [77.5946, 12.9716] },
+      address: 'GrindWell',
+      location: { type: 'Point', coordinates: [13.050804, 77.734617] },
       deliveryRadius: 10,
       operatingHours: { open: '08:00', close: '20:00' },
-      welcomeMessage: 'Welcome to The Fresh Meat Co.! Order farm-fresh chicken, mutton, and fish delivered to your doorstep. 🍗🥩🐟',
+      welcomeMessage: 'Welcome to The Chick Meat! Order farm-fresh chicken, mutton, and fish delivered to your doorstep. 🍗🥩🐟',
     },
     { upsert: true, new: true }
   );
 
   console.log('✅ Store verified:', store.name);
 
-  // 2. Clear existing products to avoid duplicates during seeding (optional but cleaner for initial setup)
-  // await productModel.deleteMany({ storeId: store._id });
-
-  // 3. Insert Products
+  // 2. Insert Products
   for (const p of productsData) {
     const variants = [
       { name: '250g', price: Math.round(p.basePrice * 0.25), stock: 100 },
@@ -87,8 +93,18 @@ async function seed() {
       { upsert: true, new: true }
     );
   }
+  console.log(`✅ ${productsData.length} products inserted/updated.`);
 
-  console.log(`✅ ${productsData.length} products inserted/updated into the catalog.`);
+  // 3. Insert Customers
+  for (const c of customersData) {
+    await customerModel.findOneAndUpdate(
+      { whatsappNumber: c.whatsappNumber },
+      { ...c, storeId: store._id },
+      { upsert: true, new: true }
+    );
+  }
+  console.log(`✅ ${customersData.length} customers inserted/updated.`);
+
   await app.close();
 }
 

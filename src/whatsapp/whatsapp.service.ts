@@ -428,8 +428,11 @@ export class WhatsappService {
       });
       
       const parts = formatter.formatToParts(now);
-      const currentHour = parseInt(parts.find(p => p.type === 'hour').value, 10);
-      const currentMin = parseInt(parts.find(p => p.type === 'minute').value, 10);
+      const hourPart = parts.find(p => p.type === 'hour');
+      const minutePart = parts.find(p => p.type === 'minute');
+      
+      const currentHour = hourPart ? parseInt(hourPart.value, 10) : now.getHours();
+      const currentMin = minutePart ? parseInt(minutePart.value, 10) : now.getMinutes();
       
       const [openHour, openMin] = store.operatingHours.open.split(':').map(Number);
       const [closeHour, closeMin] = store.operatingHours.close.split(':').map(Number);

@@ -48,6 +48,6 @@ import { MarketingController } from './marketing/marketing.controller';
     OrdersModule,
   ],
   controllers: [AppController, UploadController, MarketingController],
-  providers: [AppService, CartService, AiService, MarketingService],
+  providers: [AppService, MarketingService],
 })
 export class AppModule {}

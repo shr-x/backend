@@ -36,13 +36,7 @@ export class Order {
   totalAmount: number;
 
   @Prop({ default: 'pending' })
-  status: string; // pending, paid, preparing, out_for_delivery, delivered, cancelled
-
-  @Prop({ default: 'pending' })
-  paymentStatus: string; // pending, success, failed
-
-  @Prop()
-  paymentId: string;
+  status: string; // pending, preparing, out_for_delivery, delivered, cancelled
 
   @Prop()
   deliveryAddress: string;

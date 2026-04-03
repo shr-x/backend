@@ -101,7 +101,7 @@ export class AppController {
     const customers = await this.customerModel.countDocuments().exec();
     const productsCount = await this.productModel.countDocuments({ isAvailable: true }).exec();
     
-    const deliveredOrders = orders.filter(o => o.status === 'delivered' || o.status === 'paid');
+    const deliveredOrders = orders.filter(o => o.status === 'delivered');
     const totalRevenue = deliveredOrders.reduce((acc, o) => acc + o.totalAmount, 0);
     
     const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length;

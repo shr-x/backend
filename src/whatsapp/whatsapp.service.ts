@@ -484,7 +484,7 @@ export class WhatsappService {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { text: `How much *${product.name}* would you like?\n\nPrice: ${priceText}/${product.unit || 'kg'}\n\nPlease select an option or type the weight (e.g., "1.5kg" or "500g")` },
+        body: { text: `How much *${product.name}* would you like?\n\nPrice: ${priceText}/${product.unit || 'kg'}` },
         action: {
           buttons: [
             { type: 'reply', reply: { id: `qty_${productId}:500g`, title: '500 Grams' } },
@@ -644,7 +644,8 @@ export class WhatsappService {
 
      await this.sendWhatsAppMessage(to, {
        type: 'text',
-       text: { body: `Your total is ₹${total}.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery. We only accept orders within our delivery range!` },
+       text: { body: `Your total is ₹${total}.\n\n Please note:
+Due to the nature of fresh meat and seafood cutting, the final weight may vary slightly (a little more or less than requested). The final billing will be adjusted accordingly based on the exact weight delivered.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery. We only accept orders within our delivery range!` },
      });
     }
 

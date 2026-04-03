@@ -41,7 +41,7 @@ export class Product {
   @Prop({ default: 'kg' })
   unit: string;
 
-  @Prop({ required: true, enum: ['chicken', 'fish', 'seafood'] })
+  @Prop({ required: true, enum: ['Chicken', 'Fish', 'Seafood'] })
   category: string;
 
   @Prop()

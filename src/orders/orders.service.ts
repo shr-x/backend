@@ -55,7 +55,7 @@ export class OrdersService {
           const message = `🚚 Your order #${orderIdShort} is out for delivery! Please keep ₹${updatedOrder.totalAmount} ready for COD.`;
           await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
         } else {
-          const message = `Order #${orderIdShort} status updated to: ${updatedOrder.status}`;
+          const message = `Order #${orderIdShort} has been successfully ${updatedOrder.status}`;
           await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
         }
       }

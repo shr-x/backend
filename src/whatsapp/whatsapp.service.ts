@@ -289,17 +289,23 @@ export class WhatsappService {
       } else if (text.startsWith('reject_')) {
         const orderId = text.replace('reject_', '');
         await this.finalizeOrder(from, orderId, false);
-      } else if (text.length > 5 && text.includes(' ')) {
-        // Use AI for general queries
-        const customer = await this.customerModel.findOne({ whatsappNumber: from, storeId: store._id });
-        const pastOrders = customer ? await this.orderModel.find({ customerId: customer._id }) : [];
-        const products = await this.productModel.find({ storeId: store._id, isAvailable: true });
-        const context = `Shop: ${store.name}. Available items: ${products.map(p => p.name).join(', ')}.`;
-        const aiResponse = await this.aiService.generateResponse(text, context, pastOrders);
-        await this.sendWhatsAppMessage(from, { type: 'text', text: { body: aiResponse } });
       } else {
-        // Assume this is an address for checkout
-        await this.processCheckoutWithAddress(from, text);
+        // Only allow location checkout. If they send text, check if they have a cart and ask for location.
+        const cart = await this.cartService.getCart(from);
+        if (cart.length > 0) {
+          await this.sendWhatsAppMessage(from, { 
+            type: 'text', 
+            text: { body: "📍 Please share your *Live Location* using the \"Location\" button in WhatsApp to complete your order. We don't accept typed addresses." } 
+          });
+        } else {
+          // If no cart, maybe use AI to respond
+          const customer = await this.customerModel.findOne({ whatsappNumber: from, storeId: store._id });
+          const pastOrders = customer ? await this.orderModel.find({ customerId: customer._id }) : [];
+          const products = await this.productModel.find({ storeId: store._id, isAvailable: true });
+          const context = `Shop: ${store.name}. Available items: ${products.map(p => p.name).join(', ')}.`;
+          const aiResponse = await this.aiService.generateResponse(text, context, pastOrders);
+          await this.sendWhatsAppMessage(from, { type: 'text', text: { body: aiResponse } });
+        }
       }
     } else if (message.type === 'location') {
       this.logger.log('Received location message');
@@ -647,43 +653,9 @@ export class WhatsappService {
 
      await this.sendWhatsAppMessage(to, {
        type: 'text',
-       text: { body: `Your total is ₹${total}.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery, or type your full address below.` },
+       text: { body: `Your total is ₹${total}.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery. We only accept orders within our delivery range!` },
      });
     }
-
-    async processCheckoutWithAddress(to: string, address: string) {
-      const cart = await this.cartService.getCart(to);
-      if (cart.length === 0) return;
-
-      const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-      const store = await this.storeModel.findOne(); // Just get the single store
-      
-      const customer = await this.customerModel.findOneAndUpdate(
-        { whatsappNumber: to },
-        { 
-          whatsappNumber: to, 
-          storeId: store?._id 
-        },
-        { upsert: true, new: true }
-      );
-
-    const order = await this.orderModel.create({
-      customerId: customer._id,
-      storeId: store?._id,
-      items: cart,
-      totalAmount: total,
-      status: 'pending', // Wait for admin approval
-      deliveryAddress: address,
-    } as any);
-
-    await this.cartService.clearCart(to);
-    
-    const orderId = (order as any)._id;
-    await this.sendWhatsAppMessage(to, {
-      type: 'text',
-      text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been received. Please wait while we verify and confirm your order with the final weight and price. 🕒` },
-    });
-  }
 
   async processCheckoutWithLocation(to: string, location: any) {
     const cart = await this.cartService.getCart(to);
@@ -692,9 +664,24 @@ export class WhatsappService {
     const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
     const store = await this.storeModel.findOne();
 
+    if (store && store.location && store.location.coordinates) {
+      const storeLat = store.location.coordinates[1];
+      const storeLon = store.location.coordinates[0];
+      const distance = this.getDistance(location.latitude, location.longitude, storeLat, storeLon);
+      
+      const radius = store.deliveryRadius || 5;
+      if (distance > radius) {
+        await this.sendWhatsAppMessage(to, {
+          type: 'text',
+          text: { body: `📍 Sorry, you are ${distance.toFixed(1)}km away. We only deliver within ${radius}km of our shop. Please visit us at our store instead!` }
+        });
+        return;
+      }
+    }
+
     const customer = await this.customerModel.findOneAndUpdate(
       { whatsappNumber: to },
-      { name: 'WhatsApp Customer', whatsappNumber: to, storeId: store?._id },
+      { whatsappNumber: to, storeId: store?._id },
       { upsert: true, new: true }
     );
 
@@ -717,6 +704,19 @@ export class WhatsappService {
       type: 'text',
       text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been received. Please wait while we verify and confirm your order with the final weight and price. 🕒` },
     });
+  }
+
+  private getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const d = R * c; // Distance in km
+    return d;
   }
 
     private isStoreOpen(store: StoreDocument): boolean {

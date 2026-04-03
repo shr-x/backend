@@ -9,7 +9,6 @@ import { Customer, CustomerDocument } from '../schemas/customer.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
 import { SupportRequest, SupportRequestDocument } from '../schemas/support-request.schema';
 import { CartService } from '../cart/cart.service';
-import { PaymentService } from '../payment/payment.service';
 import { AiService } from '../ai/ai.service';
 
 @Injectable()
@@ -20,7 +19,6 @@ export class WhatsappService {
   constructor(
     private configService: ConfigService,
     private cartService: CartService,
-    private paymentService: PaymentService,
     private aiService: AiService,
     @InjectModel(Store.name) private storeModel: Model<StoreDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
@@ -75,7 +73,7 @@ export class WhatsappService {
       interactive: {
         type: 'button',
         header: { type: 'text', text: store.name },
-        body: { text: store.welcomeMessage || 'Welcome to our meat shop! How can we help you today?' },
+        body: { text: store.welcomeMessage || `Welcome to ${store.name}! How can we help you today?` },
         footer: { text: 'Powered by shr-x.cc' },
         action: {
           buttons: [
@@ -219,20 +217,16 @@ export class WhatsappService {
   }
 
   async handleWebhook(body: any) {
-    this.logger.log('Incoming Webhook Body:', JSON.stringify(body, null, 2));
-    
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const contact = value?.contacts?.[0];
-    const whatsappName = contact?.profile?.name || 'WhatsApp Customer';
+    const whatsappName = contact?.profile?.name || 'Customer';
     const message = value?.messages?.[0];
 
     if (!message) {
       if (value?.statuses?.[0]) {
-        this.logger.log(`Received status update: ${value.statuses[0].status} for ${value.statuses[0].id}`);
-      } else {
-        this.logger.log('No message or status found in webhook');
+        this.logger.debug(`Status update: ${value.statuses[0].status} for ${value.statuses[0].id}`);
       }
       return;
     }
@@ -456,7 +450,6 @@ export class WhatsappService {
         interactive: {
           type: 'button',
           body: { text: `*${p.name}*\n${p.description || ''}\n\nPrice: ${priceText}/${p.unit || 'kg'}` },
-          footer: { text: 'Fresh from Chick Meat' },
           action: {
             buttons: [
               { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Product' } }

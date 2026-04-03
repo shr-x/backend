@@ -10,8 +10,6 @@ import { Order, OrderSchema } from './schemas/order.schema';
 import { SupportRequest, SupportRequestSchema } from './schemas/support-request.schema';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { CartService } from './cart/cart.service';
-import { PaymentService } from './payment/payment.service';
-import { PaymentController } from './payment/payment.controller';
 import { AiService } from './ai/ai.service';
 import { MarketingService } from './marketing/marketing.service';
 import { ProductsModule } from './products/products.module';
@@ -49,7 +47,7 @@ import { MarketingController } from './marketing/marketing.controller';
     ProductsModule,
     OrdersModule,
   ],
-  controllers: [AppController, PaymentController, UploadController, MarketingController],
-  providers: [AppService, CartService, PaymentService, AiService, MarketingService],
+  controllers: [AppController, UploadController, MarketingController],
+  providers: [AppService, CartService, AiService, MarketingService],
 })
 export class AppModule {}

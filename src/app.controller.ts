@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Post, Body } from '@nestjs/common';
 import { AppService } from './app.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -31,6 +31,27 @@ export class AppController {
   async getStoreInfo() {
     // Return the first store found in the DB
     return this.storeModel.findOne().exec();
+  }
+
+  @Post('store-info')
+  async updateStoreInfo(@Body() storeData: any) {
+    // Update the first store found in the DB
+    const store = await this.storeModel.findOne().exec();
+    if (!store) {
+      return this.storeModel.create(storeData);
+    }
+    return this.storeModel.findByIdAndUpdate(store._id, storeData, { new: true }).exec();
+  }
+
+  @Post('rotate-api-key')
+  async rotateApiKey() {
+    const store = await this.storeModel.findOne().exec();
+    if (!store) return { error: 'Store not found' };
+    
+    // Generate a simple new API key
+    const newKey = 'cm_' + Math.random().toString(36).substring(2, 15);
+    await this.storeModel.findByIdAndUpdate(store._id, { apiKey: newKey }).exec();
+    return { apiKey: newKey };
   }
 
   @Get('customers')

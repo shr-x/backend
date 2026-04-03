@@ -59,4 +59,38 @@ export class OrdersService {
 
     return updatedOrder;
   }
+
+  async exportReport(): Promise<{ csv: string; filename: string }> {
+    try {
+      const orders = await this.orderModel.find().populate('customerId').sort({ createdAt: -1 }).exec();
+      
+      // Simple CSV generation
+      let csv = 'Order ID,Customer,Phone,Amount,Status,Date\n';
+      orders.forEach(o => {
+        try {
+          const orderAny = o as any;
+          const date = orderAny.createdAt ? new Date(orderAny.createdAt).toLocaleDateString() : 'N/A';
+          const customer: any = o.customerId;
+          const customerName = customer?.name || 'Unknown';
+          const phone = customer?.whatsappNumber || 'N/A';
+          
+          // Ensure values don't contain commas that break CSV
+          const safeName = customerName.replace(/,/g, '');
+          const safeStatus = (o.status || 'pending').replace(/,/g, '');
+          
+          csv += `${o._id},"${safeName}",${phone},${o.totalAmount || 0},${safeStatus},${date}\n`;
+        } catch (e) {
+          console.error(`Error processing order ${o._id} for report:`, e);
+        }
+      });
+
+      return { 
+        csv, 
+        filename: `report-${new Date().toISOString().split('T')[0]}.csv` 
+      };
+    } catch (error) {
+      console.error('Export Report Error:', error);
+      throw error;
+    }
+  }
 }

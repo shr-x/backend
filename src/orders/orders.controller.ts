@@ -11,6 +11,11 @@ export class OrdersController {
     return this.ordersService.findAll(storeId);
   }
 
+  @Get('export-report')
+  exportReport() {
+    return this.ordersService.exportReport();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.ordersService.findOne(id);

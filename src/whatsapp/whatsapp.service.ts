@@ -99,11 +99,15 @@ export class WhatsappService {
 
     await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "🔥 *Today's Special Deals!* 🔥" } });
     for (const p of products) {
+      const priceText = p.offerPrice 
+        ? `~₹${p.basePrice}~ *₹${p.offerPrice}*` 
+        : `₹${p.basePrice}`;
+
       const msg: any = {
         type: 'interactive',
         interactive: {
           type: 'button',
-          body: { text: `*${p.name}* (ON OFFER!)\n${p.description || ''}\n\nDeal Price: ₹${p.basePrice}/${p.unit || 'kg'}` },
+          body: { text: `*${p.name}* (ON OFFER!)\n${p.description || ''}\n\nDeal Price: ${priceText}/${p.unit || 'kg'}` },
           action: {
             buttons: [
               { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Weight' } }
@@ -225,7 +229,11 @@ export class WhatsappService {
     const message = value?.messages?.[0];
 
     if (!message) {
-      this.logger.log('No message found in webhook');
+      if (value?.statuses?.[0]) {
+        this.logger.log(`Received status update: ${value.statuses[0].status} for ${value.statuses[0].id}`);
+      } else {
+        this.logger.log('No message or status found in webhook');
+      }
       return;
     }
 
@@ -363,21 +371,34 @@ export class WhatsappService {
   private isSupportedImage(url: string): boolean {
     if (!url) return false;
     const lowerUrl = url.toLowerCase();
-    return !lowerUrl.endsWith('.svg') && !lowerUrl.includes('image/svg');
+    
+    // Check for .svg in the path before query parameters
+    const path = lowerUrl.split('?')[0];
+    if (path.endsWith('.svg')) return false;
+    
+    // Check if the URL contains image/svg (often in data URLs or some CDN URLs)
+    if (lowerUrl.includes('image/svg')) return false;
+    
+    // Check if it's a known image format
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    return supportedExtensions.some(ext => path.endsWith(ext)) || !path.includes('.');
   }
 
   async sendCategoryProducts(to: string, category: string) {
-    this.logger.log(`Fetching products for category: ${category}`);
+    this.logger.log(`Fetching products for category: "${category}" (to: ${to})`);
+    
+    // Case-insensitive search
     const products = await this.productModel.find({ 
-      category, 
+      category: { $regex: new RegExp(`^${category}$`, 'i') }, 
       isAvailable: true 
     });
     this.logger.log(`Found ${products.length} products in ${category}`);
 
     if (products.length === 0) {
+      this.logger.warn(`No products found for category: ${category}`);
       await this.sendWhatsAppMessage(to, {
         type: 'text',
-        text: { body: `No products found in ${category}.` },
+        text: { body: `Sorry, we couldn't find any items in "${category}". Please try another category!` },
       });
       return;
     }
@@ -385,11 +406,15 @@ export class WhatsappService {
     // WhatsApp List Messages don't support images directly in rows. 
     // We'll send individual products with images for a better experience.
     for (const p of products) {
+      const priceText = p.offerPrice 
+        ? `~₹${p.basePrice}~ *₹${p.offerPrice}*` 
+        : `₹${p.basePrice}`;
+
       const message: any = {
         type: 'interactive',
         interactive: {
           type: 'button',
-          body: { text: `*${p.name}*\n${p.description || ''}\n\nPrice: ₹${p.basePrice}/${p.unit || 'kg'}` },
+          body: { text: `*${p.name}*\n${p.description || ''}\n\nPrice: ${priceText}/${p.unit || 'kg'}` },
           footer: { text: 'Fresh from Chick Meat' },
           action: {
             buttons: [
@@ -417,11 +442,15 @@ export class WhatsappService {
     const product = await this.productModel.findById(productId);
     if (!product) return;
 
+    const priceText = product.offerPrice 
+      ? `~₹${product.basePrice}~ *₹${product.offerPrice}*` 
+      : `₹${product.basePrice}`;
+
     await this.sendWhatsAppMessage(to, {
       type: 'interactive',
       interactive: {
         type: 'button',
-        body: { text: `How much *${product.name}* would you like?\n\nPrice: ₹${product.basePrice}/${product.unit || 'kg'}\n\nPlease select an option or type the weight (e.g., "1.5kg" or "500g")` },
+        body: { text: `How much *${product.name}* would you like?\n\nPrice: ${priceText}/${product.unit || 'kg'}\n\nPlease select an option or type the weight (e.g., "1.5kg" or "500g")` },
         action: {
           buttons: [
             { type: 'reply', reply: { id: `qty_${productId}:500g`, title: '500 Grams' } },
@@ -466,23 +495,24 @@ export class WhatsappService {
     const product = await this.productModel.findById(productId);
     if (!product) return;
 
-    const price = Math.round(product.basePrice * weightInKg);
+    const unitPrice = product.offerPrice || product.basePrice;
+    const totalPrice = Math.round(unitPrice * weightInKg);
     const weightLabel = weightInKg >= 1 ? `${weightInKg}kg` : `${weightInKg * 1000}g`;
 
     await this.cartService.addItem(to, {
       productId,
       name: product.name,
       variantName: weightLabel,
-      price: product.basePrice, // price per kg
+      price: unitPrice, // price per kg
       quantity: weightInKg,
-      totalPrice: price
+      totalPrice: totalPrice
     });
 
     await this.sendWhatsAppMessage(to, {
        type: 'interactive',
        interactive: {
          type: 'button',
-         body: { text: `Added ${weightLabel} of ${product.name} to your cart! (₹${price})` },
+         body: { text: `Added ${weightLabel} of ${product.name} to your cart! (₹${totalPrice})` },
          action: {
            buttons: [
              { type: 'reply', reply: { id: 'view_cart', title: 'View Cart' } },

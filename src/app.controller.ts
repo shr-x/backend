@@ -110,18 +110,32 @@ export class AppController {
   async getDashboardStats() {
     const orders = await this.orderModel.find().exec();
     const customers = await this.customerModel.countDocuments().exec();
+    const productsCount = await this.productModel.countDocuments({ isAvailable: true }).exec();
     
-    const totalRevenue = orders
-      .filter(o => o.status === 'delivered' || o.status === 'paid')
-      .reduce((acc, o) => acc + o.totalAmount, 0);
+    const deliveredOrders = orders.filter(o => o.status === 'delivered' || o.status === 'paid');
+    const totalRevenue = deliveredOrders.reduce((acc, o) => acc + o.totalAmount, 0);
     
     const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length;
+
+    // Calculate average fulfillment time
+    let avgFulfillment = '45 mins';
+    if (deliveredOrders.length > 0) {
+      const times = deliveredOrders
+        .filter(o => (o as any).createdAt && (o as any).updatedAt)
+        .map(o => (new Date((o as any).updatedAt).getTime() - new Date((o as any).createdAt).getTime()) / (1000 * 60));
+      
+      if (times.length > 0) {
+        const avgMinutes = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+        avgFulfillment = `${avgMinutes} mins`;
+      }
+    }
 
     return {
       totalRevenue,
       activeOrders,
       totalCustomers: customers,
-      avgFulfillment: '45 mins',
+      totalProducts: productsCount,
+      avgFulfillment,
     };
   }
 }

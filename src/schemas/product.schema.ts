@@ -32,6 +32,12 @@ export class Product {
   @Prop({ required: true })
   basePrice: number;
 
+  @Prop()
+  mrp?: number;
+
+  @Prop()
+  offerPrice?: number;
+
   @Prop({ default: 'kg' })
   unit: string;
 

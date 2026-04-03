@@ -441,6 +441,12 @@ export class WhatsappService {
       const openTime = openHour * 60 + openMin;
       const closeTime = closeHour * 60 + closeMin;
       
-      return currentTime >= openTime && currentTime <= closeTime;
+      if (closeTime >= openTime) {
+        // Normal case: open and close on the same day
+        return currentTime >= openTime && currentTime <= closeTime;
+      } else {
+        // Overnight case: e.g., open at 08:00 and close at 02:00 next day
+        return currentTime >= openTime || currentTime <= closeTime;
+      }
     }
   }

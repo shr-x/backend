@@ -7,6 +7,7 @@ import { Store, StoreDocument } from '../schemas/store.schema';
 import { Product, ProductDocument } from '../schemas/product.schema';
 import { Customer, CustomerDocument } from '../schemas/customer.schema';
 import { Order, OrderDocument } from '../schemas/order.schema';
+import { SupportRequest, SupportRequestDocument } from '../schemas/support-request.schema';
 import { CartService } from '../cart/cart.service';
 import { PaymentService } from '../payment/payment.service';
 import { AiService } from '../ai/ai.service';
@@ -25,6 +26,7 @@ export class WhatsappService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(SupportRequest.name) private supportModel: Model<SupportRequestDocument>,
   ) {}
 
   async sendWhatsAppMessage(to: string, payload: any) {
@@ -32,6 +34,19 @@ export class WhatsappService {
     // Try to get token from DB (rotated), fallback to config
     const store = await this.storeModel.findOne().exec();
     const token = store?.apiKey || this.configService.get('WHATSAPP_TOKEN');
+
+    // Filter out unsupported SVG images from the payload
+    if (payload.type === 'image' && payload.image?.link && !this.isSupportedImage(payload.image.link)) {
+      this.logger.warn(`Rejecting SVG image in payload: ${payload.image.link}. Converting to text.`);
+      payload = {
+        type: 'text',
+        text: { body: payload.image.caption || 'Product image not available in SVG format.' }
+      };
+    } else if (payload.type === 'interactive' && payload.interactive?.header?.type === 'image' && 
+               payload.interactive.header.image?.link && !this.isSupportedImage(payload.interactive.header.image.link)) {
+      this.logger.warn(`Removing SVG image from interactive header: ${payload.interactive.header.image.link}`);
+      delete payload.interactive.header; // Remove the image header entirely
+    }
 
     try {
       await axios.post(
@@ -96,7 +111,7 @@ export class WhatsappService {
           },
         },
       };
-      if (p.image) {
+      if (p.image && this.isSupportedImage(p.image)) {
         msg.interactive.header = { type: 'image', image: { link: p.image } };
       }
       await this.sendWhatsAppMessage(to, msg);
@@ -144,12 +159,19 @@ export class WhatsappService {
     const order = await this.orderModel.findById(orderId);
     if (!order) return;
     
+    // Create support request in DB
+    await this.supportModel.create({
+      customerId: order.customerId,
+      orderId: order._id,
+      whatsappNumber: to,
+      status: 'open',
+      message: `User requested help with Order #${orderId.toString().slice(-6).toUpperCase()}`
+    });
+
     await this.sendWhatsAppMessage(to, { 
       type: 'text', 
       text: { body: `I've notified our support team about Order #${orderId.toString().slice(-6).toUpperCase()}. A representative will message you shortly! 🕒` } 
     });
-    
-    // Optionally: Notify admin via socket or another message
   }
 
   async sendMenu(to: string) {
@@ -338,11 +360,19 @@ export class WhatsappService {
     }
   }
 
+  private isSupportedImage(url: string): boolean {
+    if (!url) return false;
+    const lowerUrl = url.toLowerCase();
+    return !lowerUrl.endsWith('.svg') && !lowerUrl.includes('image/svg');
+  }
+
   async sendCategoryProducts(to: string, category: string) {
+    this.logger.log(`Fetching products for category: ${category}`);
     const products = await this.productModel.find({ 
       category, 
       isAvailable: true 
     });
+    this.logger.log(`Found ${products.length} products in ${category}`);
 
     if (products.length === 0) {
       await this.sendWhatsAppMessage(to, {
@@ -353,8 +383,7 @@ export class WhatsappService {
     }
 
     // WhatsApp List Messages don't support images directly in rows. 
-    // We'll send individual products with images for a better experience if requested,
-    // or keep list for navigation. Let's send individual messages for products with images.
+    // We'll send individual products with images for a better experience.
     for (const p of products) {
       const message: any = {
         type: 'interactive',
@@ -370,11 +399,14 @@ export class WhatsappService {
         },
       };
 
-      if (p.image) {
+      if (p.image && this.isSupportedImage(p.image)) {
         message.interactive.header = {
           type: 'image',
           image: { link: p.image }
         };
+      } else if (p.image) {
+        // If image is unsupported, we skip the header image but maybe log it
+        this.logger.warn(`Skipping unsupported image for product ${p.name}: ${p.image}`);
       }
 
       await this.sendWhatsAppMessage(to, message);

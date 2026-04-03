@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Post, Body } from '@nestjs/common';
+import { Controller, Get, Query, Post, Body, Patch, Param } from '@nestjs/common';
 import { AppService } from './app.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -6,6 +6,7 @@ import { Store } from './schemas/store.schema';
 import { Order } from './schemas/order.schema';
 import { Customer } from './schemas/customer.schema';
 import { Product } from './schemas/product.schema';
+import { SupportRequest } from './schemas/support-request.schema';
 
 @Controller('api')
 export class AppController {
@@ -15,7 +16,18 @@ export class AppController {
     @InjectModel(Order.name) private orderModel: Model<Order>,
     @InjectModel(Customer.name) private customerModel: Model<Customer>,
     @InjectModel(Product.name) private productModel: Model<Product>,
+    @InjectModel(SupportRequest.name) private supportModel: Model<SupportRequest>,
   ) {}
+
+  @Get('support-requests')
+  async getSupportRequests() {
+    return this.supportModel.find().populate('customerId').populate('orderId').sort({ createdAt: -1 }).exec();
+  }
+
+  @Patch('support-requests/:id')
+  async updateSupportStatus(@Param('id') id: string, @Body() body: { status: string }) {
+    return this.supportModel.findByIdAndUpdate(id, { status: body.status }, { new: true }).exec();
+  }
 
   @Get()
   getHello(): string {

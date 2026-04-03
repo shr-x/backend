@@ -88,7 +88,7 @@ async function seed() {
         variants,
         inStock: true,
         isAvailable: true,
-        image: `https://placehold.co/400x300?text=${p.name.replace(/\s+/g, '+')}`,
+        image: `https://placehold.co/400x300/png?text=${p.name.replace(/\s+/g, '+')}`,
       },
       { upsert: true, new: true }
     );

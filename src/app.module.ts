@@ -7,6 +7,7 @@ import { Store, StoreSchema } from './schemas/store.schema';
 import { Product, ProductSchema } from './schemas/product.schema';
 import { Customer, CustomerSchema } from './schemas/customer.schema';
 import { Order, OrderSchema } from './schemas/order.schema';
+import { SupportRequest, SupportRequestSchema } from './schemas/support-request.schema';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { CartService } from './cart/cart.service';
 import { PaymentService } from './payment/payment.service';
@@ -42,6 +43,7 @@ import { MarketingController } from './marketing/marketing.controller';
       { name: Product.name, schema: ProductSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: SupportRequest.name, schema: SupportRequestSchema },
     ]),
     WhatsappModule,
     ProductsModule,

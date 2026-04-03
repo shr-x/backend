@@ -6,6 +6,7 @@ import { Store, StoreSchema } from '../schemas/store.schema';
 import { Product, ProductSchema } from '../schemas/product.schema';
 import { Customer, CustomerSchema } from '../schemas/customer.schema';
 import { Order, OrderSchema } from '../schemas/order.schema';
+import { SupportRequest, SupportRequestSchema } from '../schemas/support-request.schema';
 import { CartService } from '../cart/cart.service';
 import { PaymentService } from '../payment/payment.service';
 import { AiService } from '../ai/ai.service';
@@ -17,6 +18,7 @@ import { AiService } from '../ai/ai.service';
       { name: Product.name, schema: ProductSchema },
       { name: Customer.name, schema: CustomerSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: SupportRequest.name, schema: SupportRequestSchema },
     ]),
   ],
   controllers: [WhatsappController],

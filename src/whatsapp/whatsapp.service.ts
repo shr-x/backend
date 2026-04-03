@@ -271,7 +271,7 @@ export class WhatsappService {
       
       if (text === 'hi' || text === 'hello') {
         await this.sendWelcomeMessage(from, store);
-      } else if (text.match(/(\d+(\.\d+)?)\s*(kg|g)/i) || !isNaN(parseFloat(text))) {
+      } else if (text.match(/(\d+(\.\d+)?)\s*(kg|g|gram|gm)/i) || text.match(/^(\d+(\.\d+)?)$/)) {
         // Handle custom weight input
         await this.handleCustomWeight(from, text);
       } else if (text.startsWith('confirm_')) {
@@ -314,11 +314,20 @@ export class WhatsappService {
           await this.sendCartSummary(from);
         } else if (buttonId === 'checkout') {
           await this.startCheckout(from);
+        } else if (buttonId.startsWith('prod_')) {
+          const productId = buttonId.replace('prod_', '');
+          await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
+          await this.sendProductVariants(from, productId);
         } else if (buttonId.startsWith('qty_')) {
           const [productId, weightStr] = buttonId.replace('qty_', '').split(':');
           if (weightStr === 'custom') {
             await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
-            await this.sendWhatsAppMessage(from, { type: 'text', text: { body: "Please type the weight you want (e.g., 1.5kg or 250g):" } });
+            const product = await this.productModel.findById(productId);
+            const productName = product ? product.name : 'this item';
+            await this.sendWhatsAppMessage(from, { 
+              type: 'text', 
+              text: { body: `Please enter the quantity of *${productName}* in grams or kg (e.g., 1.5kg or 500g):` } 
+            });
           } else {
             const weightInKg = weightStr === '1kg' ? 1 : 0.5;
             await this.addWeightToCart(from, productId, weightInKg);
@@ -338,6 +347,7 @@ export class WhatsappService {
           await this.sendCategoryProducts(from, category);
         } else if (listId.startsWith('prod_')) {
           const productId = listId.replace('prod_', '');
+          await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
           await this.sendProductVariants(from, productId);
         } else if (listId.startsWith('help_order_')) {
           const orderId = listId.replace('help_order_', '');
@@ -472,19 +482,30 @@ export class WhatsappService {
     }
 
     let weightInKg = 0;
-    const kgMatch = text.match(/(\d+(\.\d+)?)\s*kg/i);
-    const gMatch = text.match(/(\d+)\s*g/i);
+    const cleanText = text.toLowerCase().replace(/\s+/g, '');
+    
+    // Match patterns like "500g", "500gram", "500gm", "0.5kg"
+    const kgMatch = cleanText.match(/(\d+(\.\d+)?)(kg)/i);
+    const gMatch = cleanText.match(/(\d+)(g|gram|gm)/i);
+    const justNumberMatch = cleanText.match(/^(\d+(\.\d+)?)$/);
 
     if (kgMatch) {
       weightInKg = parseFloat(kgMatch[1]);
     } else if (gMatch) {
       weightInKg = parseInt(gMatch[1]) / 1000;
-    } else if (!isNaN(parseFloat(text))) {
-      weightInKg = parseFloat(text); // Default to kg if just number
+    } else if (justNumberMatch) {
+      const num = parseFloat(justNumberMatch[1]);
+      // Heuristic: If user types > 10, assume grams. If <= 10, assume kg.
+      // Most meat orders are not > 10kg, but often > 10g.
+      if (num >= 50) {
+        weightInKg = num / 1000;
+      } else {
+        weightInKg = num;
+      }
     }
 
     if (weightInKg <= 0) {
-      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "Invalid weight. Please try again (e.g., 1.5kg)." } });
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "Invalid weight. Please try again (e.g., 1.5kg or 500g)." } });
       return;
     }
 

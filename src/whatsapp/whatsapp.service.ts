@@ -428,7 +428,7 @@ export class WhatsappService {
           footer: { text: 'Fresh from Chick Meat' },
           action: {
             buttons: [
-              { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Weight' } }
+              { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Product' } }
             ],
           },
         },

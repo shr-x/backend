@@ -24,40 +24,47 @@ export class OrdersService {
   }
 
   async update(id: string, updateOrderDto: UpdateOrderDto): Promise<Order | null> {
-    const updatedOrder = await this.orderModel.findByIdAndUpdate(id, updateOrderDto, { new: true }).populate('customerId').exec();
-    
-    if (updatedOrder) {
-      const customer = updatedOrder.customerId as any;
-      const orderIdShort = updatedOrder._id.toString().slice(-6).toUpperCase();
+    try {
+      const updatedOrder = await this.orderModel.findByIdAndUpdate(id, updateOrderDto, { new: true }).populate('customerId').exec();
       
-      if (updateOrderDto.status === 'confirmed') {
-        const message = `✅ *Order #${orderIdShort} Verified!*\n\nOur team has verified your order. The final adjusted amount is *₹${updatedOrder.totalAmount}*.\n\nDo you want to proceed with this order?`;
-        await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, {
-          type: 'interactive',
-          interactive: {
-            type: 'button',
-            body: { text: message },
-            action: {
-              buttons: [
-                { type: 'reply', reply: { id: `opt_confirm:${updatedOrder._id}`, title: 'Confirm Order' } },
-                { type: 'reply', reply: { id: `opt_cancel:${updatedOrder._id}`, title: 'Cancel Order' } },
-              ],
+      if (updatedOrder) {
+        const customer = updatedOrder.customerId as any;
+        const orderIdShort = updatedOrder._id.toString().slice(-6).toUpperCase();
+        
+        if (updateOrderDto.status === 'confirmed') {
+          const itemsText = updatedOrder.items.map(i => `• ${i.quantity}kg x ${i.name}`).join('\n');
+          const message = `✅ *Order #${orderIdShort} Verified!*\n\nOur team has verified your order details:\n\n${itemsText}\n\n*Final Total: ₹${updatedOrder.totalAmount}*\n\nDo you want to proceed with this order?`;
+          
+          await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, {
+            type: 'interactive',
+            interactive: {
+              type: 'button',
+              body: { text: message },
+              action: {
+                buttons: [
+                  { type: 'reply', reply: { id: `opt_confirm:${updatedOrder._id}`, title: 'Confirm Order' } },
+                  { type: 'reply', reply: { id: `opt_cancel:${updatedOrder._id}`, title: 'Cancel Order' } },
+                ],
+              },
             },
-          },
-        });
-      } else if (updateOrderDto.status === 'cancelled') {
-        const message = `❌ Your order #${orderIdShort} has been cancelled by the shop.`;
-        await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
-      } else if (updateOrderDto.status === 'out_for_delivery') {
-        const message = `🚚 Your order #${orderIdShort} is out for delivery! Please keep ₹${updatedOrder.totalAmount} ready for COD.`;
-        await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
-      } else {
-        const message = `Order #${orderIdShort} status updated to: ${updatedOrder.status}`;
-        await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
+          });
+        } else if (updateOrderDto.status === 'cancelled') {
+          const message = `❌ Your order #${orderIdShort} has been cancelled by the shop.`;
+          await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
+        } else if (updateOrderDto.status === 'out_for_delivery') {
+          const message = `🚚 Your order #${orderIdShort} is out for delivery! Please keep ₹${updatedOrder.totalAmount} ready for COD.`;
+          await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
+        } else {
+          const message = `Order #${orderIdShort} status updated to: ${updatedOrder.status}`;
+          await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
+        }
       }
-    }
 
-    return updatedOrder;
+      return updatedOrder;
+    } catch (error) {
+      console.error('Order Update Error:', error);
+      throw error;
+    }
   }
 
   async exportReport(): Promise<{ csv: string; filename: string }> {

@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
 
 export class UpdateOrderDto {
   @IsString()
@@ -8,4 +8,12 @@ export class UpdateOrderDto {
   @IsString()
   @IsOptional()
   eta?: string;
+
+  @IsNumber()
+  @IsOptional()
+  totalAmount?: number;
+
+  @IsArray()
+  @IsOptional()
+  items?: any[];
 }

@@ -47,6 +47,9 @@ export class Product {
   @Prop({ default: true })
   inStock: boolean;
 
+  @Prop({ default: false })
+  onOffer: boolean;
+
   @Prop({ type: [String], default: [] })
   tags: string[];
 

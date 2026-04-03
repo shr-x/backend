@@ -11,13 +11,23 @@ export class MarketingService {
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
   ) {}
 
-  async broadcastOffer(storeId: string, message: string) {
+  async broadcastOffer(storeId: string, message: string, imageUrl?: string) {
     const customers = await this.customerModel.find().exec();
     for (const customer of customers) {
-      await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, {
-        type: 'text',
-        text: { body: message },
-      });
+      if (imageUrl) {
+        await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, {
+          type: 'image',
+          image: { 
+            link: imageUrl,
+            caption: message
+          },
+        });
+      } else {
+        await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, {
+          type: 'text',
+          text: { body: message },
+        });
+      }
     }
   }
 

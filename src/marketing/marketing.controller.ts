@@ -6,10 +6,10 @@ export class MarketingController {
   constructor(private readonly marketingService: MarketingService) {}
 
   @Post('campaign')
-  async createCampaign(@Body() body: { name: string; message: string; type: string }) {
+  async createCampaign(@Body() body: { name: string; message: string; type: string; image?: string }) {
     // In a single-store setup, we don't need storeId filtering
     // We just broadcast to all customers
-    return this.marketingService.broadcastOffer('', body.message);
+    return this.marketingService.broadcastOffer('', body.message, body.image);
   }
 
   @Get('stats')

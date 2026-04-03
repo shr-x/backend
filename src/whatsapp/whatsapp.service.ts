@@ -29,7 +29,9 @@ export class WhatsappService {
 
   async sendWhatsAppMessage(to: string, payload: any) {
     const phoneNumberId = this.configService.get('WHATSAPP_PHONE_NUMBER_ID');
-    const token = this.configService.get('WHATSAPP_TOKEN');
+    // Try to get token from DB (rotated), fallback to config
+    const store = await this.storeModel.findOne().exec();
+    const token = store?.apiKey || this.configService.get('WHATSAPP_TOKEN');
 
     try {
       await axios.post(
@@ -61,16 +63,93 @@ export class WhatsappService {
         type: 'button',
         header: { type: 'text', text: store.name },
         body: { text: store.welcomeMessage || 'Welcome to our meat shop! How can we help you today?' },
-        footer: { text: 'Powered by MeatSaaS' },
+        footer: { text: 'Powered by shr-x.cc' },
         action: {
           buttons: [
             { type: 'reply', reply: { id: 'view_menu', title: 'View Menu' } },
             { type: 'reply', reply: { id: 'todays_offers', title: 'Today\'s Offers' } },
-            { type: 'reply', reply: { id: 'order_now', title: 'Order Now' } },
+            { type: 'reply', reply: { id: 'help', title: 'Help' } },
           ],
         },
       },
     });
+  }
+
+  async sendTodaysOffers(to: string) {
+    const products = await this.productModel.find({ onOffer: true, isAvailable: true });
+    if (products.length === 0) {
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "No special offers today, but our fresh meat is always at great prices!" } });
+      return;
+    }
+
+    await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "🔥 *Today's Special Deals!* 🔥" } });
+    for (const p of products) {
+      const msg: any = {
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: `*${p.name}* (ON OFFER!)\n${p.description || ''}\n\nDeal Price: ₹${p.basePrice}/${p.unit || 'kg'}` },
+          action: {
+            buttons: [
+              { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Weight' } }
+            ],
+          },
+        },
+      };
+      if (p.image) {
+        msg.interactive.header = { type: 'image', image: { link: p.image } };
+      }
+      await this.sendWhatsAppMessage(to, msg);
+    }
+  }
+
+  async sendHelpOptions(to: string) {
+    const customer = await this.customerModel.findOne({ whatsappNumber: to });
+    if (!customer) {
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "How can we help you? You can ask me anything about our products or shop!" } });
+      return;
+    }
+
+    const lastOrders = await this.orderModel.find({ customerId: customer._id })
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .exec();
+
+    if (lastOrders.length === 0) {
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "How can we help you? You can ask me anything about our products or shop!" } });
+      return;
+    }
+
+    const rows = lastOrders.map(o => ({
+      id: `help_order_${o._id}`,
+      title: `Order #${o._id.toString().slice(-6).toUpperCase()}`,
+      description: `₹${o.totalAmount} • ${o.status.toUpperCase()}`
+    }));
+
+    await this.sendWhatsAppMessage(to, {
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: 'Order Support' },
+        body: { text: 'Which order do you need help with?' },
+        action: {
+          button: 'Select Order',
+          sections: [{ title: 'Recent Orders', rows }]
+        }
+      }
+    });
+  }
+
+  async handleHelpOrder(to: string, orderId: string) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) return;
+    
+    await this.sendWhatsAppMessage(to, { 
+      type: 'text', 
+      text: { body: `I've notified our support team about Order #${orderId.toString().slice(-6).toUpperCase()}. A representative will message you shortly! 🕒` } 
+    });
+    
+    // Optionally: Notify admin via socket or another message
   }
 
   async sendMenu(to: string) {
@@ -162,6 +241,15 @@ export class WhatsappService {
       
       if (text === 'hi' || text === 'hello') {
         await this.sendWelcomeMessage(from, store);
+      } else if (text.match(/(\d+(\.\d+)?)\s*(kg|g)/i) || !isNaN(parseFloat(text))) {
+        // Handle custom weight input
+        await this.handleCustomWeight(from, text);
+      } else if (text.startsWith('confirm_')) {
+        const orderId = text.replace('confirm_', '');
+        await this.finalizeOrder(from, orderId, true);
+      } else if (text.startsWith('reject_')) {
+        const orderId = text.replace('reject_', '');
+        await this.finalizeOrder(from, orderId, false);
       } else if (text.length > 5 && text.includes(' ')) {
         // Use AI for general queries
         const customer = await this.customerModel.findOne({ whatsappNumber: from, storeId: store._id });
@@ -186,12 +274,28 @@ export class WhatsappService {
         const buttonId = interactive.button_reply.id;
         this.logger.log(`Button ID: ${buttonId}`);
         
-        if (buttonId === 'view_menu' || buttonId === 'todays_offers' || buttonId === 'order_now' || buttonId === 'view_menu_again') {
+        if (buttonId === 'view_menu' || buttonId === 'view_menu_again') {
           await this.sendMenu(from);
+        } else if (buttonId === 'todays_offers') {
+          await this.sendTodaysOffers(from);
+        } else if (buttonId === 'help') {
+          await this.sendHelpOptions(from);
         } else if (buttonId === 'view_cart') {
           await this.sendCartSummary(from);
         } else if (buttonId === 'checkout') {
           await this.startCheckout(from);
+        } else if (buttonId.startsWith('qty_')) {
+          const [productId, weightStr] = buttonId.replace('qty_', '').split(':');
+          if (weightStr === 'custom') {
+            await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
+            await this.sendWhatsAppMessage(from, { type: 'text', text: { body: "Please type the weight you want (e.g., 1.5kg or 250g):" } });
+          } else {
+            const weightInKg = weightStr === '1kg' ? 1 : 0.5;
+            await this.addWeightToCart(from, productId, weightInKg);
+          }
+        } else if (buttonId.startsWith('opt_')) {
+          const [action, orderId] = buttonId.replace('opt_', '').split(':');
+          await this.finalizeOrder(from, orderId, action === 'confirm');
         } else {
           this.logger.warn(`Unhandled button ID: ${buttonId}`);
         }
@@ -205,11 +309,32 @@ export class WhatsappService {
         } else if (listId.startsWith('prod_')) {
           const productId = listId.replace('prod_', '');
           await this.sendProductVariants(from, productId);
-        } else if (listId.startsWith('var_')) {
-          const [productId, variantIndex] = listId.replace('var_', '').split(':');
-          await this.addToCart(from, productId, parseInt(variantIndex));
+        } else if (listId.startsWith('help_order_')) {
+          const orderId = listId.replace('help_order_', '');
+          await this.handleHelpOrder(from, orderId);
         }
       }
+    }
+  }
+
+  async finalizeOrder(to: string, orderId: string, isConfirmed: boolean) {
+    const order = await this.orderModel.findById(orderId);
+    if (!order) return;
+
+    if (isConfirmed) {
+      order.status = 'preparing';
+      await order.save();
+      await this.sendWhatsAppMessage(to, {
+        type: 'text',
+        text: { body: `Awesome! Your order #${orderId.toString().slice(-6).toUpperCase()} is now being prepared. We'll notify you when it's out for delivery! 🍗` }
+      });
+    } else {
+      order.status = 'cancelled';
+      await order.save();
+      await this.sendWhatsAppMessage(to, {
+        type: 'text',
+        text: { body: `Your order #${orderId.toString().slice(-6).toUpperCase()} has been cancelled. We hope to serve you again soon!` }
+      });
     }
   }
 
@@ -219,27 +344,41 @@ export class WhatsappService {
       isAvailable: true 
     });
 
-    await this.sendWhatsAppMessage(to, {
-      type: 'interactive',
-      interactive: {
-        type: 'list',
-        header: { type: 'text', text: this.truncate(`${category} Items`, 60) },
-        body: { text: 'Choose an item to see options.' },
-        action: {
-          button: 'Select Item',
-          sections: [
-            {
-              title: this.truncate(category, 24),
-              rows: products.map(p => ({
-                id: `prod_${p._id}`,
-                title: this.truncate(p.name, 24),
-                description: this.truncate(`From ₹${p.basePrice}`, 72),
-              })),
-            },
-          ],
+    if (products.length === 0) {
+      await this.sendWhatsAppMessage(to, {
+        type: 'text',
+        text: { body: `No products found in ${category}.` },
+      });
+      return;
+    }
+
+    // WhatsApp List Messages don't support images directly in rows. 
+    // We'll send individual products with images for a better experience if requested,
+    // or keep list for navigation. Let's send individual messages for products with images.
+    for (const p of products) {
+      const message: any = {
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: `*${p.name}*\n${p.description || ''}\n\nPrice: ₹${p.basePrice}/${p.unit || 'kg'}` },
+          footer: { text: 'Fresh from Chick Meat' },
+          action: {
+            buttons: [
+              { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Weight' } }
+            ],
+          },
         },
-      },
-    });
+      };
+
+      if (p.image) {
+        message.interactive.header = {
+          type: 'image',
+          image: { link: p.image }
+        };
+      }
+
+      await this.sendWhatsAppMessage(to, message);
+    }
   }
 
   async sendProductVariants(to: string, productId: string) {
@@ -249,24 +388,78 @@ export class WhatsappService {
     await this.sendWhatsAppMessage(to, {
       type: 'interactive',
       interactive: {
-        type: 'list',
-        header: { type: 'text', text: this.truncate(product.name, 60) },
-        body: { text: 'Select a variant to add to cart.' },
+        type: 'button',
+        body: { text: `How much *${product.name}* would you like?\n\nPrice: ₹${product.basePrice}/${product.unit || 'kg'}\n\nPlease select an option or type the weight (e.g., "1.5kg" or "500g")` },
         action: {
-          button: 'Select Variant',
-          sections: [
-            {
-              title: 'Available Options',
-              rows: product.variants.map((v, idx) => ({
-                id: `var_${productId}:${idx}`,
-                title: this.truncate(v.name, 24),
-                description: this.truncate(`Price: ₹${v.price}`, 72),
-              })),
-            },
+          buttons: [
+            { type: 'reply', reply: { id: `qty_${productId}:500g`, title: '500 Grams' } },
+            { type: 'reply', reply: { id: `qty_${productId}:1kg`, title: '1 KG' } },
+            { type: 'reply', reply: { id: `qty_${productId}:custom`, title: 'Custom Weight' } },
           ],
         },
       },
     });
+  }
+
+  async handleCustomWeight(to: string, text: string) {
+    // Basic regex to find productId in user session or similar.
+    // For simplicity, let's assume we store the "LAST_PRODUCT_ID" in Redis.
+    const lastProdId = await this.cartService['redis'].get(`last_prod:${to}`);
+    if (!lastProdId) {
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "Please select a product first!" } });
+      return;
+    }
+
+    let weightInKg = 0;
+    const kgMatch = text.match(/(\d+(\.\d+)?)\s*kg/i);
+    const gMatch = text.match(/(\d+)\s*g/i);
+
+    if (kgMatch) {
+      weightInKg = parseFloat(kgMatch[1]);
+    } else if (gMatch) {
+      weightInKg = parseInt(gMatch[1]) / 1000;
+    } else if (!isNaN(parseFloat(text))) {
+      weightInKg = parseFloat(text); // Default to kg if just number
+    }
+
+    if (weightInKg <= 0) {
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "Invalid weight. Please try again (e.g., 1.5kg)." } });
+      return;
+    }
+
+    await this.addWeightToCart(to, lastProdId, weightInKg);
+  }
+
+  async addWeightToCart(to: string, productId: string, weightInKg: number) {
+    const product = await this.productModel.findById(productId);
+    if (!product) return;
+
+    const price = Math.round(product.basePrice * weightInKg);
+    const weightLabel = weightInKg >= 1 ? `${weightInKg}kg` : `${weightInKg * 1000}g`;
+
+    await this.cartService.addItem(to, {
+      productId,
+      name: product.name,
+      variantName: weightLabel,
+      price: product.basePrice, // price per kg
+      quantity: weightInKg,
+      totalPrice: price
+    });
+
+    await this.sendWhatsAppMessage(to, {
+       type: 'interactive',
+       interactive: {
+         type: 'button',
+         body: { text: `Added ${weightLabel} of ${product.name} to your cart! (₹${price})` },
+         action: {
+           buttons: [
+             { type: 'reply', reply: { id: 'view_cart', title: 'View Cart' } },
+             { type: 'reply', reply: { id: 'view_menu', title: 'Add More' } },
+             { type: 'reply', reply: { id: 'checkout', title: 'Checkout' } },
+           ],
+         },
+       },
+     });
   }
 
   async addToCart(to: string, productId: string, variantIndex: number) {
@@ -340,14 +533,10 @@ export class WhatsappService {
        total += item.price * item.quantity;
      });
 
-     // In a real scenario, we'd check if the user has a saved address.
-     // For now, let's ask for the address or location.
      await this.sendWhatsAppMessage(to, {
        type: 'text',
-       text: { body: `Your total is ₹${total}. Please share your delivery address or send your live location.` },
+       text: { body: `Your total is ₹${total}.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery, or type your full address below.` },
      });
-     
-     // Note: We would usually store the state "AWAITING_ADDRESS" in Redis for this user.
     }
 
     async processCheckoutWithAddress(to: string, address: string) {
@@ -363,57 +552,57 @@ export class WhatsappService {
         { upsert: true, new: true }
       );
 
-      const order = await this.orderModel.create({
-        customerId: customer._id,
-        storeId: store?._id,
-        items: cart,
-        totalAmount: total,
-        status: 'preparing',
-        deliveryAddress: address,
-      } as any);
+    const order = await this.orderModel.create({
+      customerId: customer._id,
+      storeId: store?._id,
+      items: cart,
+      totalAmount: total,
+      status: 'pending', // Wait for admin approval
+      deliveryAddress: address,
+    } as any);
 
-      await this.cartService.clearCart(to);
-      
-      const orderId = (order as any)._id;
-      await this.sendWhatsAppMessage(to, {
-        type: 'text',
-        text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been placed. We'll notify you when it's out for delivery!` },
-      });
-    }
+    await this.cartService.clearCart(to);
+    
+    const orderId = (order as any)._id;
+    await this.sendWhatsAppMessage(to, {
+      type: 'text',
+      text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been received. Please wait while we verify and confirm your order with the final weight and price. 🕒` },
+    });
+  }
 
-    async processCheckoutWithLocation(to: string, location: any) {
-      const cart = await this.cartService.getCart(to);
-      if (cart.length === 0) return;
+  async processCheckoutWithLocation(to: string, location: any) {
+    const cart = await this.cartService.getCart(to);
+    if (cart.length === 0) return;
 
-      const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-      const store = await this.storeModel.findOne();
+    const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const store = await this.storeModel.findOne();
 
-      const customer = await this.customerModel.findOneAndUpdate(
-        { whatsappNumber: to },
-        { name: 'WhatsApp Customer', whatsappNumber: to, storeId: store?._id },
-        { upsert: true, new: true }
-      );
+    const customer = await this.customerModel.findOneAndUpdate(
+      { whatsappNumber: to },
+      { name: 'WhatsApp Customer', whatsappNumber: to, storeId: store?._id },
+      { upsert: true, new: true }
+    );
 
-      const order = await this.orderModel.create({
-        customerId: customer._id,
-        storeId: store?._id,
-        items: cart,
-        totalAmount: total,
-        status: 'preparing',
-        deliveryLocation: {
-          type: 'Point',
-          coordinates: [location.longitude, location.latitude],
-        },
-      } as any);
+    const order = await this.orderModel.create({
+      customerId: customer._id,
+      storeId: store?._id,
+      items: cart,
+      totalAmount: total,
+      status: 'pending', // Wait for admin approval
+      deliveryLocation: {
+        type: 'Point',
+        coordinates: [location.longitude, location.latitude],
+      },
+    } as any);
 
-      await this.cartService.clearCart(to);
-      
-      const orderId = (order as any)._id;
-      await this.sendWhatsAppMessage(to, {
-        type: 'text',
-        text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been placed. We'll notify you when it's out for delivery!` },
-      });
-    }
+    await this.cartService.clearCart(to);
+    
+    const orderId = (order as any)._id;
+    await this.sendWhatsAppMessage(to, {
+      type: 'text',
+      text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been received. Please wait while we verify and confirm your order with the final weight and price. 🕒` },
+    });
+  }
 
     private isStoreOpen(store: StoreDocument): boolean {
       if (!store.operatingHours) return true;

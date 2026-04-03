@@ -33,11 +33,26 @@ export class AiService {
     }
 
     try {
+      if (!this.model) {
+        throw new Error('Gemini model not initialized');
+      }
       const result = await this.model.generateContent(fullPrompt);
       const response = await result.response;
       return response.text();
     } catch (error) {
-      return "I'm sorry, I'm having trouble processing your request. Please try again later or wait for a shop representative.";
+      console.error('Gemini error, using fallback:', error);
+      // Fallback: Simple keyword-based response
+      const lowerPrompt = prompt.toLowerCase();
+      if (lowerPrompt.includes('price') || lowerPrompt.includes('cost')) {
+        return "You can see the latest prices in our menu! Just click 'View Menu' in the main options.";
+      }
+      if (lowerPrompt.includes('offer') || lowerPrompt.includes('discount')) {
+        return "Check out 'Today's Offers' for the best deals on fresh meat!";
+      }
+      if (lowerPrompt.includes('delivery') || lowerPrompt.includes('time')) {
+        return "We deliver fresh meat to your doorstep within 45-60 minutes!";
+      }
+      return "I'm sorry, I'm having trouble processing your request with Gemini. Please try again later or wait for a shop representative.";
     }
   }
 }

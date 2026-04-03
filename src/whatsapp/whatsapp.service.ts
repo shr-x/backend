@@ -31,9 +31,7 @@ export class WhatsappService {
 
   async sendWhatsAppMessage(to: string, payload: any) {
     const phoneNumberId = this.configService.get('WHATSAPP_PHONE_NUMBER_ID');
-    // Try to get token from DB (rotated), fallback to config
-    const store = await this.storeModel.findOne().exec();
-    const token = store?.apiKey || this.configService.get('WHATSAPP_TOKEN');
+    const token = this.configService.get('WHATSAPP_TOKEN');
 
     // Filter out unsupported SVG images from the payload
     if (payload.type === 'image' && payload.image?.link && !this.isSupportedImage(payload.image.link)) {
@@ -110,7 +108,7 @@ export class WhatsappService {
           body: { text: `*${p.name}* (ON OFFER!)\n${p.description || ''}\n\nDeal Price: ${priceText}/${p.unit || 'kg'}` },
           action: {
             buttons: [
-              { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Weight' } }
+              { type: 'reply', reply: { id: `prod_${p._id}`, title: 'Select Product' } }
             ],
           },
         },

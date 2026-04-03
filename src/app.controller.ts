@@ -55,17 +55,6 @@ export class AppController {
     return this.storeModel.findByIdAndUpdate(store._id, storeData, { new: true }).exec();
   }
 
-  @Post('rotate-api-key')
-  async rotateApiKey() {
-    const store = await this.storeModel.findOne().exec();
-    if (!store) return { error: 'Store not found' };
-    
-    // Generate a simple new API key
-    const newKey = 'cm_' + Math.random().toString(36).substring(2, 15);
-    await this.storeModel.findByIdAndUpdate(store._id, { apiKey: newKey }).exec();
-    return { apiKey: newKey };
-  }
-
   @Get('customers')
   async getCustomers() {
     return this.customerModel.find().exec();

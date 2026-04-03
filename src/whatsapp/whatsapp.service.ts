@@ -226,6 +226,8 @@ export class WhatsappService {
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
+    const contact = value?.contacts?.[0];
+    const whatsappName = contact?.profile?.name || 'WhatsApp Customer';
     const message = value?.messages?.[0];
 
     if (!message) {
@@ -238,6 +240,13 @@ export class WhatsappService {
     }
 
     const from = message.from;
+
+    // Update or create customer with the real name from WhatsApp
+    await this.customerModel.findOneAndUpdate(
+      { whatsappNumber: from },
+      { $set: { name: whatsappName } },
+      { upsert: true, new: true }
+    );
     const rawStoreNumber = value?.metadata?.display_phone_number;
     const normalizedStoreNumber = rawStoreNumber?.replace(/\D/g, '');
     
@@ -360,6 +369,24 @@ export class WhatsappService {
   async finalizeOrder(to: string, orderId: string, isConfirmed: boolean) {
     const order = await this.orderModel.findById(orderId);
     if (!order) return;
+
+    // Once an option is selected (confirmed/cancelled/preparing), another choice can't be made.
+    if (order.status !== 'confirmed') {
+      const orderIdShort = orderId.toString().slice(-6).toUpperCase();
+      this.logger.warn(`User ${to} tried to change already finalized order #${orderIdShort} (Status: ${order.status})`);
+      
+      let responseMsg = '';
+      if (order.status === 'preparing' || order.status === 'out_for_delivery' || order.status === 'delivered') {
+        responseMsg = `Order #${orderIdShort} is already being processed or delivered. It cannot be changed now.`;
+      } else if (order.status === 'cancelled') {
+        responseMsg = `Order #${orderIdShort} has already been cancelled.`;
+      } else {
+        responseMsg = `Order #${orderIdShort} status cannot be changed via this link anymore.`;
+      }
+
+      await this.sendWhatsAppMessage(to, { type: 'text', text: { body: responseMsg } });
+      return;
+    }
 
     if (isConfirmed) {
       order.status = 'preparing';
@@ -522,6 +549,7 @@ export class WhatsappService {
 
     await this.cartService.addItem(to, {
       productId,
+      productName: product.name, // Ensure this field is set for orders
       name: product.name,
       variantName: weightLabel,
       price: unitPrice, // price per kg
@@ -552,6 +580,7 @@ export class WhatsappService {
     const variant = product.variants[variantIndex];
     await this.cartService.addItem(to, {
       productId,
+      productName: product.name,
       name: product.name,
       variantName: variant.name,
       price: variant.price,
@@ -631,7 +660,10 @@ export class WhatsappService {
       
       const customer = await this.customerModel.findOneAndUpdate(
         { whatsappNumber: to },
-        { name: 'WhatsApp Customer', whatsappNumber: to, storeId: store?._id },
+        { 
+          whatsappNumber: to, 
+          storeId: store?._id 
+        },
         { upsert: true, new: true }
       );
 

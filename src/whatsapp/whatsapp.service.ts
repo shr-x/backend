@@ -321,6 +321,26 @@ export class WhatsappService {
           await this.sendCartSummary(from);
         } else if (buttonId === 'checkout') {
           await this.startCheckout(from);
+        } else if (buttonId.startsWith('cart_inc_')) {
+          const [productId, variantName] = buttonId.replace('cart_inc_', '').split(':');
+          const cart = await this.cartService.getCart(from);
+          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
+          if (item) {
+            await this.cartService.updateQuantity(from, productId, item.quantity + 1, variantName);
+            await this.sendCartSummary(from);
+          }
+        } else if (buttonId.startsWith('cart_dec_')) {
+          const [productId, variantName] = buttonId.replace('cart_dec_', '').split(':');
+          const cart = await this.cartService.getCart(from);
+          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
+          if (item) {
+            await this.cartService.updateQuantity(from, productId, item.quantity - 1, variantName);
+            await this.sendCartSummary(from);
+          }
+        } else if (buttonId.startsWith('cart_rem_')) {
+          const [productId, variantName] = buttonId.replace('cart_rem_', '').split(':');
+          await this.cartService.removeItem(from, productId, variantName);
+          await this.sendCartSummary(from);
         } else if (buttonId.startsWith('prod_')) {
           const productId = buttonId.replace('prod_', '');
           await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
@@ -348,8 +368,36 @@ export class WhatsappService {
       } else if (interactive.type === 'list_reply') {
         const listId = interactive.list_reply.id;
         this.logger.log(`List ID: ${listId}`);
-        
-        if (listId.startsWith('cat_')) {
+
+        if (listId === 'view_menu' || listId === 'view_menu_again') {
+          await this.sendMenu(from);
+        } else if (listId === 'todays_offers') {
+          await this.sendTodaysOffers(from);
+        } else if (listId === 'view_cart') {
+          await this.sendCartSummary(from);
+        } else if (listId === 'checkout') {
+          await this.startCheckout(from);
+        } else if (listId.startsWith('cart_inc_')) {
+          const [productId, variantName] = listId.replace('cart_inc_', '').split(':');
+          const cart = await this.cartService.getCart(from);
+          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
+          if (item) {
+            await this.cartService.updateQuantity(from, productId, item.quantity + 1, variantName);
+            await this.sendCartSummary(from);
+          }
+        } else if (listId.startsWith('cart_dec_')) {
+          const [productId, variantName] = listId.replace('cart_dec_', '').split(':');
+          const cart = await this.cartService.getCart(from);
+          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
+          if (item) {
+            await this.cartService.updateQuantity(from, productId, item.quantity - 1, variantName);
+            await this.sendCartSummary(from);
+          }
+        } else if (listId.startsWith('cart_rem_')) {
+          const [productId, variantName] = listId.replace('cart_rem_', '').split(':');
+          await this.cartService.removeItem(from, productId, variantName);
+          await this.sendCartSummary(from);
+        } else if (listId.startsWith('cat_')) {
           const category = listId.replace('cat_', '');
           await this.sendCategoryProducts(from, category);
         } else if (listId.startsWith('prod_')) {
@@ -610,23 +658,45 @@ export class WhatsappService {
        return;
      }
 
-     let summary = '*Your Cart:*\n\n';
+     await this.cartService.setReviewStatus(to, true);
+
+     let summary = '*🛒 Your Cart Review:*\n\n';
      let total = 0;
      cart.forEach((item, index) => {
-       summary += `${index + 1}. ${item.name} (${item.variantName}) x ${item.quantity} - ₹${item.price * item.quantity}\n`;
+       summary += `${index + 1}. *${item.name}* (${item.variantName})\n`;
+       summary += `   Qty: ${item.quantity} x ₹${item.price} = *₹${item.price * item.quantity}*\n\n`;
        total += item.price * item.quantity;
      });
-     summary += `\n*Total: ₹${total}*`;
+     summary += `*Total Amount: ₹${total}*\n\n`;
+     summary += `_You can adjust quantities or remove items below:_`;
+
+     const sections = cart.map((item) => ({
+       title: `${item.name} (${item.variantName})`,
+       rows: [
+         { id: `cart_inc_${item.productId}:${item.variantName}`, title: '➕ Increase Qty', description: `Add 1 more ${item.name}` },
+         { id: `cart_dec_${item.productId}:${item.variantName}`, title: '➖ Decrease Qty', description: `Remove 1 ${item.name}` },
+         { id: `cart_rem_${item.productId}:${item.variantName}`, title: '🗑️ Remove Item', description: `Remove all ${item.name} from cart` },
+       ],
+     }));
 
      await this.sendWhatsAppMessage(to, {
        type: 'interactive',
        interactive: {
-         type: 'button',
+         type: 'list',
+         header: { type: 'text', text: 'Review & Manage Cart' },
          body: { text: summary },
+         footer: { text: 'Choose an option to modify your cart' },
          action: {
-           buttons: [
-             { type: 'reply', reply: { id: 'view_menu_again', title: 'Add More' } },
-             { type: 'reply', reply: { id: 'checkout', title: 'Checkout' } },
+           button: 'Manage Cart',
+           sections: [
+             {
+               title: 'Cart Operations',
+               rows: [
+                 { id: 'checkout', title: '✅ Proceed to Checkout', description: 'Confirm items and start checkout' },
+                 { id: 'view_menu_again', title: '🛍️ Add More Items', description: 'Go back to menu' },
+               ]
+             },
+             ...sections
            ],
          },
        },
@@ -636,6 +706,16 @@ export class WhatsappService {
    async startCheckout(to: string) {
      const cart = await this.cartService.getCart(to);
      if (cart.length === 0) return;
+
+     const hasReviewed = await this.cartService.hasReviewed(to);
+     if (!hasReviewed) {
+       await this.sendWhatsAppMessage(to, {
+         type: 'text',
+         text: { body: "⚠️ Please review your cart items before checking out. It only takes a second! 🛒" }
+       });
+       await this.sendCartSummary(to);
+       return;
+     }
 
      let total = 0;
      cart.forEach(item => {

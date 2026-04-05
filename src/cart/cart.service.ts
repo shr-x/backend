@@ -52,10 +52,47 @@ export class CartService {
     await this.redis.del(key);
   }
 
-  async removeItem(whatsappNumber: string, productId: string) {
+  async removeItem(whatsappNumber: string, productId: string, variantName?: string) {
     const key = this.getCartKey(whatsappNumber);
     const cart = await this.getCart(whatsappNumber);
-    const newCart = cart.filter(i => i.productId !== productId);
+    const newCart = cart.filter(i => {
+      if (variantName) {
+        return i.productId !== productId || i.variantName !== variantName;
+      }
+      return i.productId !== productId;
+    });
     await this.redis.set(key, JSON.stringify(newCart), 'EX', 3600 * 24);
+  }
+
+  async updateQuantity(whatsappNumber: string, productId: string, quantity: number, variantName?: string) {
+    const key = this.getCartKey(whatsappNumber);
+    let cart = await this.getCart(whatsappNumber);
+    
+    const itemIndex = cart.findIndex(i => {
+      if (variantName) {
+        return i.productId === productId && i.variantName === variantName;
+      }
+      return i.productId === productId;
+    });
+
+    if (itemIndex > -1) {
+      if (quantity <= 0) {
+        cart = cart.filter((_, idx) => idx !== itemIndex);
+      } else {
+        cart[itemIndex].quantity = quantity;
+      }
+      await this.redis.set(key, JSON.stringify(cart), 'EX', 3600 * 24);
+    }
+  }
+
+  async setReviewStatus(whatsappNumber: string, status: boolean) {
+    const key = `cart_reviewed:${whatsappNumber}`;
+    await this.redis.set(key, status ? 'true' : 'false', 'EX', 3600); // Reviewed status lasts for 1h
+  }
+
+  async hasReviewed(whatsappNumber: string): Promise<boolean> {
+    const key = `cart_reviewed:${whatsappNumber}`;
+    const status = await this.redis.get(key);
+    return status === 'true';
   }
 }

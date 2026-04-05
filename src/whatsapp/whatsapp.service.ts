@@ -698,33 +698,50 @@ export class WhatsappService {
      summary += `*Total Amount: ₹${total}*\n\n`;
      summary += `_You can adjust quantities or remove items below:_`;
 
-     const sections = cart.map((item) => ({
-       title: `${item.name} (${item.variantName})`,
-       rows: [
-         { id: `cart_inc_${item.productId}:${item.variantName}`, title: '➕ Increase Qty', description: `Add 1 more ${item.name}` },
-         { id: `cart_dec_${item.productId}:${item.variantName}`, title: '➖ Decrease Qty', description: `Remove 1 ${item.name}` },
-         { id: `cart_rem_${item.productId}:${item.variantName}`, title: '🗑️ Remove Item', description: `Remove all ${item.name} from cart` },
-       ],
-     }));
+     const sections = cart.map((item) => {
+       const itemName = item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name;
+       const variantLabel = item.variantName;
+       
+       return {
+         title: `${itemName} (${variantLabel})`.substring(0, 24),
+         rows: [
+           { 
+             id: `cart_inc_${item.productId}:${item.variantName}`, 
+             title: '➕ Increase Qty', 
+             description: `Set new qty for ${itemName}`.substring(0, 72)
+           },
+           { 
+             id: `cart_dec_${item.productId}:${item.variantName}`, 
+             title: '➖ Decrease Qty', 
+             description: `Reduce qty for ${itemName}`.substring(0, 72)
+           },
+           { 
+             id: `cart_rem_${item.productId}:${item.variantName}`, 
+             title: '🗑️ Remove Item', 
+             description: `Remove ${itemName} from cart`.substring(0, 72)
+           },
+         ],
+       };
+     });
 
      await this.sendWhatsAppMessage(to, {
        type: 'interactive',
        interactive: {
          type: 'list',
-         header: { type: 'text', text: 'Review & Manage Cart' },
+         header: { type: 'text', text: 'Cart Review' },
          body: { text: summary },
-         footer: { text: 'Choose an option to modify your cart' },
+         footer: { text: 'Select an option to manage' },
          action: {
            button: 'Manage Cart',
            sections: [
              {
-               title: 'Cart Operations',
+               title: 'Operations',
                rows: [
-                 { id: 'checkout', title: '✅ Proceed to Checkout', description: 'Confirm items and start checkout' },
-                 { id: 'view_menu_again', title: '🛍️ Add More Items', description: 'Go back to menu' },
+                 { id: 'checkout', title: '✅ Checkout', description: 'Proceed to finalize order' },
+                 { id: 'view_menu_again', title: '🛍️ Add More', description: 'Browse more items' },
                ]
              },
-             ...sections
+             ...sections.slice(0, 8) // Max 10 sections total (2 fixed + up to 8 items)
            ],
          },
        },

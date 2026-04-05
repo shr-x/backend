@@ -66,13 +66,15 @@ export class AppController {
     
     const regex = new RegExp(query, 'i');
     
+    const orderOrConditions: any[] = [{ status: regex }];
+    if (query.length === 24) orderOrConditions.push({ _id: query });
+    // Search by last 6 characters of ID if query length is 6
+    if (query.length === 6) {
+      orderOrConditions.push({ $expr: { $regexMatch: { input: { $toString: "$_id" }, regex: query + "$", options: "i" } } });
+    }
+
     const [orders, customers, products] = await Promise.all([
-      this.orderModel.find({ 
-        $or: [
-          { _id: query.length === 24 ? query : undefined }, // Only search by ID if valid length
-          { status: regex }
-        ] 
-      }).populate('customerId').limit(5).exec(),
+      this.orderModel.find({ $or: orderOrConditions }).populate('customerId').sort({ createdAt: -1 }).limit(5).exec(),
       this.customerModel.find({ 
         $or: [
           { name: regex },

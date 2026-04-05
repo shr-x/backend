@@ -323,24 +323,32 @@ export class WhatsappService {
           await this.startCheckout(from);
         } else if (buttonId.startsWith('cart_inc_')) {
           const [productId, variantName] = buttonId.replace('cart_inc_', '').split(':');
-          const cart = await this.cartService.getCart(from);
-          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
-          if (item) {
-            await this.cartService.updateQuantity(from, productId, item.quantity + 1, variantName);
-            await this.sendCartSummary(from);
-          }
+          await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
+          await this.cartService['redis'].set(`last_variant:${from}`, variantName, 'EX', 300);
+          await this.sendWhatsAppMessage(from, { 
+            type: 'text', 
+            text: { body: `Please enter your desired quantity for *${variantName}* (e.g., 1.5kg or 500g):` } 
+          });
         } else if (buttonId.startsWith('cart_dec_')) {
           const [productId, variantName] = buttonId.replace('cart_dec_', '').split(':');
+          await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
+          await this.cartService['redis'].set(`last_variant:${from}`, variantName, 'EX', 300);
+          await this.sendWhatsAppMessage(from, { 
+            type: 'text', 
+            text: { body: `Please enter your new quantity for *${variantName}* (e.g., 1kg or 250g):` } 
+          });
+        } else if (buttonId.startsWith('cart_rem_')) {
+          const [productId, variantName] = buttonId.replace('cart_rem_', '').split(':');
           const cart = await this.cartService.getCart(from);
           const item = cart.find(i => i.productId === productId && i.variantName === variantName);
           if (item) {
-            await this.cartService.updateQuantity(from, productId, item.quantity - 1, variantName);
+            if (item.quantity > 1) {
+              await this.cartService.updateQuantity(from, productId, item.quantity - 1, variantName);
+            } else {
+              await this.cartService.removeItem(from, productId, variantName);
+            }
             await this.sendCartSummary(from);
           }
-        } else if (buttonId.startsWith('cart_rem_')) {
-          const [productId, variantName] = buttonId.replace('cart_rem_', '').split(':');
-          await this.cartService.removeItem(from, productId, variantName);
-          await this.sendCartSummary(from);
         } else if (buttonId.startsWith('prod_')) {
           const productId = buttonId.replace('prod_', '');
           await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
@@ -378,26 +386,34 @@ export class WhatsappService {
         } else if (listId === 'checkout') {
           await this.startCheckout(from);
         } else if (listId.startsWith('cart_inc_')) {
-          const [productId, variantName] = listId.replace('cart_inc_', '').split(':');
-          const cart = await this.cartService.getCart(from);
-          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
-          if (item) {
-            await this.cartService.updateQuantity(from, productId, item.quantity + 1, variantName);
-            await this.sendCartSummary(from);
-          }
-        } else if (listId.startsWith('cart_dec_')) {
-          const [productId, variantName] = listId.replace('cart_dec_', '').split(':');
-          const cart = await this.cartService.getCart(from);
-          const item = cart.find(i => i.productId === productId && i.variantName === variantName);
-          if (item) {
-            await this.cartService.updateQuantity(from, productId, item.quantity - 1, variantName);
-            await this.sendCartSummary(from);
-          }
-        } else if (listId.startsWith('cart_rem_')) {
-          const [productId, variantName] = listId.replace('cart_rem_', '').split(':');
-          await this.cartService.removeItem(from, productId, variantName);
-          await this.sendCartSummary(from);
-        } else if (listId.startsWith('cat_')) {
+            const [productId, variantName] = listId.replace('cart_inc_', '').split(':');
+            await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
+            await this.cartService['redis'].set(`last_variant:${from}`, variantName, 'EX', 300);
+            await this.sendWhatsAppMessage(from, { 
+              type: 'text', 
+              text: { body: `Please enter your desired quantity for *${variantName}* (e.g., 1.5kg or 500g):` } 
+            });
+          } else if (listId.startsWith('cart_dec_')) {
+            const [productId, variantName] = listId.replace('cart_dec_', '').split(':');
+            await this.cartService['redis'].set(`last_prod:${from}`, productId, 'EX', 300);
+            await this.cartService['redis'].set(`last_variant:${from}`, variantName, 'EX', 300);
+            await this.sendWhatsAppMessage(from, { 
+              type: 'text', 
+              text: { body: `Please enter your new quantity for *${variantName}* (e.g., 1kg or 250g):` } 
+            });
+          } else if (listId.startsWith('cart_rem_')) {
+            const [productId, variantName] = listId.replace('cart_rem_', '').split(':');
+            const cart = await this.cartService.getCart(from);
+            const item = cart.find(i => i.productId === productId && i.variantName === variantName);
+            if (item) {
+              if (item.quantity > 1) {
+                await this.cartService.updateQuantity(from, productId, item.quantity - 1, variantName);
+              } else {
+                await this.cartService.removeItem(from, productId, variantName);
+              }
+              await this.sendCartSummary(from);
+            }
+          } else if (listId.startsWith('cat_')) {
           const category = listId.replace('cat_', '');
           await this.sendCategoryProducts(from, category);
         } else if (listId.startsWith('prod_')) {
@@ -462,9 +478,11 @@ export class WhatsappService {
     // Check if the URL contains image/svg (often in data URLs or some CDN URLs)
     if (lowerUrl.includes('image/svg')) return false;
     
-    // Check if it's a known image format
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
-    return supportedExtensions.some(ext => path.endsWith(ext)) || !path.includes('.');
+    // Check if it's a known image format or an uploaded file path
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    const isLocalUpload = path.includes('/uploads/');
+    
+    return supportedExtensions.some(ext => path.endsWith(ext)) || isLocalUpload || !path.includes('.');
   }
 
   async sendCategoryProducts(to: string, category: string) {
@@ -546,8 +564,9 @@ export class WhatsappService {
 
   async handleCustomWeight(to: string, text: string) {
     // Basic regex to find productId in user session or similar.
-    // For simplicity, let's assume we store the "LAST_PRODUCT_ID" in Redis.
     const lastProdId = await this.cartService['redis'].get(`last_prod:${to}`);
+    const lastVariant = await this.cartService['redis'].get(`last_variant:${to}`);
+
     if (!lastProdId) {
       await this.sendWhatsAppMessage(to, { type: 'text', text: { body: "Please select a product first!" } });
       return;
@@ -567,8 +586,6 @@ export class WhatsappService {
       weightInKg = parseInt(gMatch[1]) / 1000;
     } else if (justNumberMatch) {
       const num = parseFloat(justNumberMatch[1]);
-      // Heuristic: If user types > 10, assume grams. If <= 10, assume kg.
-      // Most meat orders are not > 10kg, but often > 10g.
       if (num >= 50) {
         weightInKg = num / 1000;
       } else {
@@ -581,7 +598,18 @@ export class WhatsappService {
       return;
     }
 
+    if (lastVariant) {
+      // This is an update from the cart review
+      await this.cartService.removeItem(to, lastProdId, lastVariant);
+      await this.cartService['redis'].del(`last_variant:${to}`);
+    }
+
     await this.addWeightToCart(to, lastProdId, weightInKg);
+    
+    // If it was a cart update, send summary again
+    if (lastVariant) {
+      await this.sendCartSummary(to);
+    }
   }
 
   async addWeightToCart(to: string, productId: string, weightInKg: number) {
@@ -754,7 +782,7 @@ export class WhatsappService {
     const customer = await this.customerModel.findOneAndUpdate(
       { whatsappNumber: to },
       { whatsappNumber: to, storeId: store?._id },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     const order = await this.orderModel.create({

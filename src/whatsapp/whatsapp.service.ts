@@ -686,6 +686,10 @@ export class WhatsappService {
        return;
      }
 
+     // Clear any stale session data
+     await this.cartService['redis'].del(`last_prod:${to}`);
+     await this.cartService['redis'].del(`last_variant:${to}`);
+
      await this.cartService.setReviewStatus(to, true);
 
      let summary = '*🛒 Your Cart Review:*\n\n';
@@ -698,8 +702,13 @@ export class WhatsappService {
      summary += `*Total Amount: ₹${total}*\n\n`;
      summary += `_You can adjust quantities or remove items below:_`;
 
-     const sections = cart.map((item) => {
-       const itemName = item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name;
+     // WhatsApp List Message Limit: Total 10 rows across all sections
+     // 2 rows for "Operations" + (4 items * 2 rows per item) = 10 rows total
+     const maxItemsInList = 4;
+     const itemsToManage = cart.slice(0, maxItemsInList);
+
+     const sections = itemsToManage.map((item) => {
+       const itemName = item.name.length > 15 ? item.name.substring(0, 12) + '...' : item.name;
        const variantLabel = item.variantName;
        
        return {
@@ -707,18 +716,13 @@ export class WhatsappService {
          rows: [
            { 
              id: `cart_inc_${item.productId}:${item.variantName}`, 
-             title: '➕ Increase Qty', 
-             description: `Set new qty for ${itemName}`.substring(0, 72)
-           },
-           { 
-             id: `cart_dec_${item.productId}:${item.variantName}`, 
-             title: '➖ Decrease Qty', 
-             description: `Reduce qty for ${itemName}`.substring(0, 72)
+             title: '✏️ Adjust Quantity', 
+             description: `Set weight for ${itemName}`.substring(0, 72)
            },
            { 
              id: `cart_rem_${item.productId}:${item.variantName}`, 
              title: '🗑️ Remove Item', 
-             description: `Remove ${itemName} from cart`.substring(0, 72)
+             description: `Remove ${itemName}`.substring(0, 72)
            },
          ],
        };
@@ -728,20 +732,20 @@ export class WhatsappService {
        type: 'interactive',
        interactive: {
          type: 'list',
-         header: { type: 'text', text: 'Cart Review' },
-         body: { text: summary },
-         footer: { text: 'Select an option to manage' },
+         header: { type: 'text', text: 'Cart Review'.substring(0, 60) },
+         body: { text: summary.substring(0, 1024) },
+         footer: { text: 'Select an option to manage'.substring(0, 60) },
          action: {
            button: 'Manage Cart',
            sections: [
              {
-               title: 'Operations',
+               title: 'Checkout & More',
                rows: [
                  { id: 'checkout', title: '✅ Checkout', description: 'Proceed to finalize order' },
-                 { id: 'view_menu_again', title: '🛍️ Add More', description: 'Browse more items' },
+                 { id: 'view_menu_again', title: '🛍️ Add More Items', description: 'Browse more products' },
                ]
              },
-             ...sections.slice(0, 8) // Max 10 sections total (2 fixed + up to 8 items)
+             ...sections
            ],
          },
        },

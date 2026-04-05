@@ -9,7 +9,7 @@ async function bootstrap() {
   // Ensure uploads directory exists
   const uploadsDir = path.join(process.cwd(), 'uploads');
   if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir);
+    fs.mkdirSync(uploadsDir, { recursive: true });
   }
   
   const isProduction = process.env.NODE_ENV === 'production';

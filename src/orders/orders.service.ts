@@ -49,13 +49,13 @@ export class OrdersService {
             },
           });
         } else if (updateOrderDto.status === 'cancelled') {
-          const message = `❌ Your order #${orderIdShort} has been cancelled by the shop.`;
+          const message = `❌ *Your order #${orderIdShort}* has been cancelled by the shop.`;
           await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
         } else if (updateOrderDto.status === 'out_for_delivery') {
-          const message = `🚚 Your order #${orderIdShort} is out for delivery! Please keep ₹${updatedOrder.totalAmount} ready for COD.`;
+          const message = `🚚 *Your order #${orderIdShort}* is *out for delivery!* Please keep *₹${updatedOrder.totalAmount}* ready for COD.`;
           await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
         } else {
-          const message = `Order #${orderIdShort} has been successfully ${updatedOrder.status}`;
+          const message = `*Order #${orderIdShort}* has been successfully *${updatedOrder.status}*`;
           await this.whatsappService.sendWhatsAppMessage(customer.whatsappNumber, { type: 'text', text: { body: message } });
         }
       }

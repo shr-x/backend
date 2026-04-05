@@ -644,8 +644,8 @@ export class WhatsappService {
 
      await this.sendWhatsAppMessage(to, {
        type: 'text',
-       text: { body: `Your total is ₹${total}.\n\n Please note:
-Due to the nature of fresh meat and seafood cutting, the final weight may vary slightly (a little more or less than requested). The final billing will be adjusted accordingly based on the exact weight delivered.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery. We only accept orders within our delivery range!` },
+       text: { body: `Your total is *₹${total}*.\n\n *Please note:\n*
+      Due to the nature of fresh meat and seafood cutting, the final weight may vary slightly ( a little more or less than requested ). The final billing will be adjusted accordingly based on the exact weight delivered.\n\n📍 Please share your *Live Location* using the "Location" button in WhatsApp for faster delivery. We only accept orders within our delivery range!` },
      });
     }
 
@@ -665,7 +665,7 @@ Due to the nature of fresh meat and seafood cutting, the final weight may vary s
       if (distance > radius) {
         await this.sendWhatsAppMessage(to, {
           type: 'text',
-          text: { body: `📍 Sorry, you are ${distance.toFixed(1)}km away. We only deliver within ${radius}km of our shop. Please visit us at our store instead!` }
+          text: { body: `📍 Sorry, you are *${distance.toFixed(1)}*km* away. We only deliver within *${radius})*km* of our shop. Please visit us at our store instead!` }
         });
         return;
       }
@@ -694,7 +694,7 @@ Due to the nature of fresh meat and seafood cutting, the final weight may vary s
     const orderId = (order as any)._id;
     await this.sendWhatsAppMessage(to, {
       type: 'text',
-      text: { body: `Thank you! Your order #${orderId.toString().slice(-6).toUpperCase()} for ₹${total} has been received. Please wait while we verify and confirm your order with the final weight and price. 🕒` },
+      text: { body: `Thank you! Your order *#${orderId.toString().slice(-6).toUpperCase()}()* for *₹${total}* has been received. Please wait while we verify and confirm your order with the final weight and price. 🕒` },
     });
   }
 

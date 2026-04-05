@@ -26,7 +26,7 @@ import { MarketingController } from './marketing/marketing.controller';
       isGlobal: true,
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
+      rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
     }),
     MongooseModule.forRootAsync({
